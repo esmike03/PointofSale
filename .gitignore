@@ -1,0 +1,15 @@
+.env.deploy
+server/.env
+server/vendor/
+server/node_modules/
+server/database/database.sqlite
+server/storage/logs/
+server/storage/framework/
+client/.dart_tool/
+client/.flutter-plugins
+client/.flutter-plugins-dependencies
+client/build/
+client/android/
+client/windows/
+client/linux/
+client/macos/

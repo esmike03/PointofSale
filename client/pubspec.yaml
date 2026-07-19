@@ -1,0 +1,56 @@
+name: pos_client
+description: Offline-first Flutter point-of-sale client for desktop and Android.
+publish_to: none
+version: 0.1.0+1
+
+environment:
+  sdk: ^3.6.0
+
+dependencies:
+  flutter:
+    sdk: flutter
+  crypto: ^3.0.3
+  csv: ^6.0.0
+  file_picker: ^8.1.7
+  http: ^1.3.0
+  lucide_icons_flutter: ^3.1.15
+  path: ^1.9.1
+  path_provider: ^2.1.5
+  sqflite: ^2.4.2
+  sqflite_common_ffi: ^2.3.5
+  uuid: ^4.5.1
+  mobile_scanner: ^7.3.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0
+  flutter_launcher_icons: ^0.14.4
+
+# Home-screen app icon generation.
+# To change the launcher icon:
+#   1. Replace assets/branding/app_icon.png with your logo
+#      (square PNG, ideally 1024x1024).
+#   2. Run:  dart run flutter_launcher_icons
+#   3. Rebuild the app (flutter run, or flutter build apk).
+flutter_launcher_icons:
+  android: "ic_launcher"
+  ios: false
+  image_path: "assets/branding/app_icon.png"
+  min_sdk_android: 21
+  adaptive_icon_background: "#16803d"
+  adaptive_icon_foreground: "assets/branding/app_icon.png"
+
+flutter:
+  uses-material-design: true
+  fonts:
+    - family: Manrope
+      fonts:
+        - asset: assets/fonts/Manrope-Regular.otf
+          weight: 400
+        - asset: assets/fonts/Manrope-Medium.otf
+          weight: 500
+        - asset: assets/fonts/Manrope-SemiBold.otf
+          weight: 600
+        - asset: assets/fonts/Manrope-Bold.otf
+          weight: 700
