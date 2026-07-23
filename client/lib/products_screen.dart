@@ -24,6 +24,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
   static const _pageSize = 25;
   int _page = 0;
   bool _showArchived = false;
+  bool _importing = false;
 
   @override
   void dispose() {
@@ -55,9 +56,14 @@ class _ProductsScreenState extends State<ProductsScreen> {
                   style: Theme.of(context).textTheme.titleLarge),
               const Spacer(),
               OutlinedButton.icon(
-                  onPressed: _importProducts,
-                  icon: const Icon(LucideIcons.upload, size: 18),
-                  label: const Text('Import CSV')),
+                  onPressed: _importing ? null : _importProducts,
+                  icon: _importing
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2))
+                      : const Icon(LucideIcons.upload, size: 18),
+                  label: Text(_importing ? 'Importing...' : 'Import CSV')),
             ]),
             const SizedBox(height: 14),
             Align(
@@ -491,6 +497,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
     final picked = await FilePicker.platform.pickFiles(
         type: FileType.custom, allowedExtensions: ['csv'], withData: true);
     if (picked == null || picked.files.single.bytes == null) return;
+    setState(() => _importing = true);
     try {
       final rows = const CsvToListConverter(shouldParseNumbers: false)
           .convert(utf8.decode(picked.files.single.bytes!));
@@ -510,20 +517,46 @@ class _ProductsScreenState extends State<ProductsScreen> {
           index.containsKey(key) && index[key]! < row.length
               ? row[index[key]!].toString().trim()
               : '';
+      // Seed the de-duplication sets with products already in the database, so
+      // an import can't create duplicates of existing items or of each other.
+      final existing = await widget.database.allProductIdentifiers();
+      final seenNames = <String>{};
+      final seenBarcodes = <String>{};
+      for (final row in existing) {
+        final existingName =
+            (row['name'] as String?)?.trim().toLowerCase() ?? '';
+        if (existingName.isNotEmpty) seenNames.add(existingName);
+        final existingBarcode =
+            (row['barcode'] as String?)?.trim().toLowerCase() ?? '';
+        if (existingBarcode.isNotEmpty) seenBarcodes.add(existingBarcode);
+      }
       final products = <Map<String, Object?>>[];
+      var duplicates = 0;
       for (var rowNumber = 1; rowNumber < rows.length; rowNumber++) {
         final row = rows[rowNumber];
         if (row.every((cell) => cell.toString().trim().isEmpty)) continue;
         final name = value(row, 'name');
+        final barcode = value(row, 'barcode');
         final price = double.tryParse(value(row, 'selling_price'));
         if (name.isEmpty || price == null || price < 0) {
           throw FormatException(
               'Row ${rowNumber + 1} needs a product name and valid selling price.');
         }
+        // A row is a duplicate if its barcode (when present) or its name
+        // already exists in the database or earlier in this same file.
+        final nameKey = name.toLowerCase();
+        final barcodeKey = barcode.toLowerCase();
+        if (seenNames.contains(nameKey) ||
+            (barcodeKey.isNotEmpty && seenBarcodes.contains(barcodeKey))) {
+          duplicates++;
+          continue;
+        }
+        seenNames.add(nameKey);
+        if (barcodeKey.isNotEmpty) seenBarcodes.add(barcodeKey);
         products.add({
           'name': name,
           'sku': _optional(value(row, 'sku')),
-          'barcode': _optional(value(row, 'barcode')),
+          'barcode': _optional(barcode),
           'sellingPrice': price,
           'costPrice': double.tryParse(value(row, 'cost_price')) ?? 0,
           'unit': value(row, 'unit').isEmpty ? 'piece' : value(row, 'unit'),
@@ -535,36 +568,68 @@ class _ProductsScreenState extends State<ProductsScreen> {
         });
       }
       if (products.isEmpty) {
-        throw const FormatException(
-            'The CSV does not contain valid product rows.');
+        throw FormatException(duplicates > 0
+            ? 'Nothing imported: all $duplicates row(s) are duplicates of existing products.'
+            : 'The CSV does not contain valid product rows.');
       }
-      for (final product in products) {
-        await widget.database.saveProduct(
-            name: product['name']! as String,
-            sku: product['sku'] as String?,
-            barcode: product['barcode'] as String?,
-            sellingPrice: product['sellingPrice']! as double,
-            costPrice: product['costPrice']! as double,
-            unit: product['unit']! as String,
-            taxCategory: product['taxCategory']! as String,
-            reorderLevel: product['reorderLevel']! as double);
-      }
+      final imported = await widget.database.importProducts(products);
       if (mounted) {
-        setState(() {});
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            content: Text('${products.length} products imported locally.')));
+        // Jump back to the active tab, first page, cleared search so the newly
+        // imported products are visible immediately, and rebuild to re-query.
+        setState(() {
+          _importing = false;
+          _showArchived = false;
+          _page = 0;
+          searchController.clear();
+        });
+        await _showImportResult(imported: imported, skipped: duplicates);
       }
     } on FormatException catch (error) {
       if (mounted) {
+        setState(() => _importing = false);
         ScaffoldMessenger.of(context)
             .showSnackBar(SnackBar(content: Text(error.message)));
       }
     } catch (error) {
       if (mounted) {
+        setState(() => _importing = false);
         ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(content: Text('Could not import CSV: $error')));
       }
     }
+  }
+
+  /// Shows a summary of what the import did once it finishes.
+  Future<void> _showImportResult(
+      {required int imported, required int skipped}) async {
+    if (!mounted) return;
+    await showDialog<void>(
+      context: context,
+      builder: (dialog) => AlertDialog(
+        icon: const Icon(LucideIcons.circleCheck,
+            color: Color(0xff16803d), size: 30),
+        title: const Text('Import complete'),
+        content: Column(mainAxisSize: MainAxisSize.min, children: [
+          _ImportStat(
+              label: 'Products imported', value: '$imported', highlight: true),
+          const SizedBox(height: 8),
+          _ImportStat(
+              label: 'Duplicates skipped', value: '$skipped'),
+          if (skipped > 0) ...[
+            const SizedBox(height: 12),
+            Text(
+                'Duplicates match an existing product by barcode or name and were not added.',
+                textAlign: TextAlign.center,
+                style: Theme.of(dialog).textTheme.bodySmall),
+          ],
+        ]),
+        actions: [
+          FilledButton(
+              onPressed: () => Navigator.pop(dialog),
+              child: const Text('Done')),
+        ],
+      ),
+    );
   }
 
   String? _optional(String value) => value.trim().isEmpty ? null : value.trim();
@@ -576,6 +641,29 @@ class _SoftDivider extends StatelessWidget {
   @override
   Widget build(BuildContext context) =>
       const SizedBox(height: 1, child: ColoredBox(color: Color(0xffdfe9e1)));
+}
+
+class _ImportStat extends StatelessWidget {
+  const _ImportStat(
+      {required this.label, required this.value, this.highlight = false});
+
+  final String label;
+  final String value;
+  final bool highlight;
+
+  @override
+  Widget build(BuildContext context) => Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(label, style: Theme.of(context).textTheme.bodyMedium),
+          const SizedBox(width: 16),
+          Text(value,
+              style: TextStyle(
+                  fontWeight: FontWeight.w800,
+                  fontSize: highlight ? 18 : 14,
+                  color: highlight ? const Color(0xff16803d) : null)),
+        ],
+      );
 }
 
 class _MenuRow extends StatelessWidget {

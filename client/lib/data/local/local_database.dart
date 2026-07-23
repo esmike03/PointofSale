@@ -229,6 +229,11 @@ class LocalDatabase {
         offset: offset,
       );
 
+  /// Name + barcode of every product (archived included), used to reject
+  /// duplicate rows during a bulk CSV import.
+  Future<List<Map<String, Object?>>> allProductIdentifiers() =>
+      _database.query('products', columns: ['name', 'barcode']);
+
   Future<Map<String, Object?>?> findByBarcodeOrSku(String code) async {
     final products = await _database.query('products',
         where: '(barcode = ? OR sku = ?) AND archived_at IS NULL',
@@ -1016,6 +1021,45 @@ class LocalDatabase {
         'created_at': now
       });
     });
+  }
+
+  /// Bulk-inserts imported products in a single transaction (far faster than
+  /// one transaction per row) and queues a `product.create` op for each.
+  /// Each item uses the same keys as [saveProduct]'s parameters
+  /// (name, sellingPrice, unit, sku, barcode, reorderLevel, costPrice,
+  /// taxCategory). Returns the number of products inserted.
+  Future<int> importProducts(List<Map<String, Object?>> items) async {
+    if (items.isEmpty) return 0;
+    const uuid = Uuid();
+    var inserted = 0;
+    await _database.transaction((txn) async {
+      for (final item in items) {
+        final id = uuid.v4();
+        final now = DateTime.now().toUtc().toIso8601String();
+        final product = {
+          'id': id,
+          'name': item['name'],
+          'sku': item['sku'],
+          'barcode': item['barcode'],
+          'selling_price': (item['sellingPrice'] as num?)?.toDouble() ?? 0,
+          'cost_price': (item['costPrice'] as num?)?.toDouble() ?? 0,
+          'unit': (item['unit'] as String?) ?? 'piece',
+          'reorder_level': (item['reorderLevel'] as num?)?.toDouble() ?? 0,
+          'tax_category': (item['taxCategory'] as String?) ?? 'vatable',
+          'updated_at': now,
+        };
+        await txn.insert('products',
+            {...product, 'quantity': 0, 'allow_negative_stock': 0});
+        await txn.insert('sync_queue', {
+          'operation_id': uuid.v4(),
+          'type': 'product.create',
+          'payload': jsonEncode(product),
+          'created_at': now,
+        });
+        inserted++;
+      }
+    });
+    return inserted;
   }
 
   Future<void> setProductArchived(String productId, bool archived) async {
@@ -1892,17 +1936,20 @@ class LocalDatabase {
   /// Replaces the local staff mirror with the list just fetched from the
   /// server, so it can be shown when the device is later offline.
   Future<void> cacheStaffUsers(List<Map<String, dynamic>> users) async {
+    final now = DateTime.now().toUtc().toIso8601String();
     await _database.transaction((txn) async {
       await txn.delete('staff_users');
       for (final user in users) {
+        // Insert raw values (no String casts) so a numeric id/field from the
+        // server doesn't crash; the TEXT columns coerce them to text.
         await txn.insert('staff_users', {
-          'id': user['id'] as String,
-          'name': user['name'] as String,
-          'email': user['email'] as String?,
-          'username': user['username'] as String?,
-          'role': user['role'] as String,
-          'deactivated_at': user['deactivated_at'] as String?,
-          'updated_at': DateTime.now().toUtc().toIso8601String(),
+          'id': user['id']?.toString(),
+          'name': user['name']?.toString() ?? '',
+          'email': user['email']?.toString(),
+          'username': user['username']?.toString(),
+          'role': user['role']?.toString() ?? '',
+          'deactivated_at': user['deactivated_at']?.toString(),
+          'updated_at': now,
         }, conflictAlgorithm: ConflictAlgorithm.replace);
       }
     });
@@ -2055,6 +2102,10 @@ class LocalDatabase {
         .cast<Map<String, dynamic>>();
     final settings = (snapshot['settings'] as List<dynamic>? ?? [])
         .cast<Map<String, dynamic>>();
+    // Staff list, when the server includes it in the pull. Absent on older
+    // backends, in which case the local mirror is left untouched.
+    final users = (snapshot['users'] as List<dynamic>? ?? [])
+        .cast<Map<String, dynamic>>();
     final inventoryByProduct = <String, num>{
       for (final item in inventory)
         item['product_id'] as String: item['quantity'] as num,
@@ -2179,6 +2230,26 @@ class LocalDatabase {
             'app_settings',
             {'key': setting['key'], 'value': setting['value']},
             conflictAlgorithm: ConflictAlgorithm.replace);
+      }
+      // Refresh the offline staff mirror so admins can manage staff without a
+      // connection. Only when the server actually sent the list.
+      if (users.isNotEmpty) {
+        await txn.delete('staff_users');
+        final now = DateTime.now().toUtc().toIso8601String();
+        for (final user in users) {
+          await txn.insert(
+              'staff_users',
+              {
+                'id': user['id']?.toString(),
+                'name': user['name']?.toString() ?? '',
+                'email': user['email']?.toString(),
+                'username': user['username']?.toString(),
+                'role': user['role']?.toString() ?? '',
+                'deactivated_at': user['deactivated_at']?.toString(),
+                'updated_at': user['updated_at']?.toString() ?? now,
+              },
+              conflictAlgorithm: ConflictAlgorithm.replace);
+        }
       }
     });
   }

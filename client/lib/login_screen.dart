@@ -59,32 +59,64 @@ class _LoginScreenState extends State<LoginScreen> {
       _loading = true;
       _error = null;
     });
+    final Uri baseUrl;
     try {
-      final baseUrl = Uri.parse(_server.text.trim());
-      final result = await ApiClient(baseUrl)
+      baseUrl = Uri.parse(_server.text.trim());
+    } on FormatException {
+      setState(() {
+        _loading = false;
+        _error = 'Enter a full server address, such as http://127.0.0.1:8000.';
+      });
+      return;
+    }
+
+    // Step 1: authenticate against the server.
+    Map<String, dynamic> result;
+    try {
+      result = await ApiClient(baseUrl)
           .login(_username.text.trim(), _password.text);
+    } on ApiException catch (error) {
+      // Server reachable but rejected the login. This also happens for an
+      // account created offline that hasn't synced yet, so try the local cache
+      // before surfacing the server's reason.
+      final ok = await _offlineSignIn();
+      if (!ok && mounted) setState(() => _error = error.message);
+      if (mounted) setState(() => _loading = false);
+      return;
+    } catch (_) {
+      // Couldn't reach the server: fall back to a cached login if one exists.
+      final ok = await _offlineSignIn();
+      if (!ok && mounted) {
+        setState(() => _error =
+            'Can\'t reach the server, and no saved offline login was found '
+            'for this user. Connect to the server to sign in the first time.');
+      }
+      if (mounted) setState(() => _loading = false);
+      return;
+    }
+
+    // Step 2: the login succeeded, so persist the FRESH token before doing
+    // anything else. Device registration must never be able to discard this
+    // session and leave a stale cached token behind.
+    try {
       final user = result['user'] as Map<String, dynamic>;
       final token = result['token'] as String;
-      final branchId = user['branch_id'] as String;
-      final userName = user['name'] as String;
-      final userRole = user['role'] as String? ?? '';
+      final branchId = user['branch_id']?.toString() ?? '';
+      final userName = user['name']?.toString() ?? _username.text.trim();
+      final userRole = user['role']?.toString() ?? '';
       final deviceId =
           await widget.database.setting('device_id') ?? const Uuid().v4();
-      await ApiClient(baseUrl, token: token).registerDevice(
-          id: deviceId,
-          name: _deviceName.text.trim().isEmpty
-              ? 'POS terminal'
-              : _deviceName.text.trim(),
-          mode: 'hosted',
-          branchId: branchId);
+      final deviceName = _deviceName.text.trim().isEmpty
+          ? 'POS terminal'
+          : _deviceName.text.trim();
       await widget.database.saveSetting('server_url', baseUrl.toString());
       await widget.database.saveSetting('token', token);
       await widget.database.saveSetting('device_id', deviceId);
       await widget.database.saveSetting('branch_id', branchId);
       await widget.database.saveSetting('user_name', userName);
       await widget.database.saveSetting('user_role', userRole);
-      await widget.database.saveSetting('device_name', _deviceName.text.trim());
-      // Remember this login so the cashier can still sign in offline later.
+      await widget.database.saveSetting('device_name', deviceName);
+      // Remember this login so the user can still sign in offline later.
       await widget.database.cacheCredential(
           username: _username.text.trim(),
           password: _password.text,
@@ -92,22 +124,17 @@ class _LoginScreenState extends State<LoginScreen> {
           userRole: userRole,
           branchId: branchId,
           token: token);
+      // Register this device, but don't fail the sign-in if it errors — the
+      // session token is already valid and saved for syncing.
+      try {
+        await ApiClient(baseUrl, token: token).registerDevice(
+            id: deviceId, name: deviceName, mode: 'hosted', branchId: branchId);
+      } catch (_) {}
       widget.onSignedIn();
-    } on FormatException {
-      setState(() => _error =
-          'Enter a full server address, such as http://127.0.0.1:8000.');
-    } on ApiException catch (error) {
-      // The server was reachable but rejected the request (e.g. wrong
-      // password). Don't fall back to the offline cache in that case.
-      setState(() => _error = error.message);
-    } catch (_) {
-      // The server could not be reached. Fall back to a previously cached
-      // login for this user if one exists on this device.
-      final ok = await _offlineSignIn();
-      if (!ok && mounted) {
-        setState(() => _error =
-            'Can\'t reach the server, and no saved offline login was found '
-            'for this user. Connect to the server to sign in the first time.');
+    } catch (error) {
+      if (mounted) {
+        setState(() =>
+            _error = 'Signed in, but could not save the session: $error');
       }
     } finally {
       if (mounted) setState(() => _loading = false);

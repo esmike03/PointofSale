@@ -117,16 +117,24 @@ class ApiClient {
         ? <String, dynamic>{}
         : jsonDecode(response.body) as Map<String, dynamic>;
     if (response.statusCode >= 300) {
-      throw ApiException(body['message']?.toString() ??
-          'Server returned ${response.statusCode}.');
+      throw ApiException(
+          body['message']?.toString() ??
+              'Server returned ${response.statusCode}.',
+          statusCode: response.statusCode);
     }
     return body;
   }
 }
 
 class ApiException implements Exception {
-  ApiException(this.message);
+  ApiException(this.message, {this.statusCode});
   final String message;
+  final int? statusCode;
+
+  /// Whether the server rejected the request because the session token is
+  /// missing, expired, or revoked (HTTP 401).
+  bool get isUnauthenticated => statusCode == 401;
+
   @override
   String toString() => message;
 }

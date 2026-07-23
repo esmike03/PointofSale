@@ -1,4 +1,7 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import 'async_dispose.dart';
@@ -24,8 +27,11 @@ class _ManagementScreenState extends State<ManagementScreen> {
   }
 
   Future<void> _reload() async {
-    setState(() => _data = _load());
-    await _data;
+    final future = _load();
+    setState(() {
+      _data = future;
+    });
+    await future;
   }
 
   Future<_ManagementData> _load() async {
@@ -41,17 +47,23 @@ class _ManagementScreenState extends State<ManagementScreen> {
       await widget.database.cacheStaffUsers(users);
       await widget.database.cacheAuditLogs(logs);
       return _ManagementData(users: users, logs: logs, offline: false);
-    } catch (_) {
-      // Server unreachable: fall back to the local mirror so the admin can
-      // still view and manage staff. Changes will queue and sync later.
-      return _ManagementData(
+    } on SocketException {
+      return _cachedData();
+    } on http.ClientException {
+      return _cachedData();
+    }
+    // Any other error (a real server error, bad response shape, etc.) is left
+    // to propagate so it surfaces in the UI instead of hiding as "offline".
+  }
+
+  /// The locally mirrored staff + audit data, used when the server is
+  /// unreachable.
+  Future<_ManagementData> _cachedData() async => _ManagementData(
         users: await widget.database.cachedStaffUsers(),
         logs: await widget.database.cachedAuditLogs(),
         offline: true,
         pendingSync: await widget.database.pendingStaffSyncCount(),
       );
-    }
-  }
 
   @override
   Widget build(BuildContext context) => Scaffold(
@@ -150,7 +162,21 @@ class _ManagementScreenState extends State<ManagementScreen> {
                     color: Color(0xff92620a)))),
       ]));
 
-  Widget _staffList(List<Map<String, dynamic>> users) => ListView.separated(
+  Widget _emptyState(IconData icon, String message) => Center(
+      child: Column(mainAxisSize: MainAxisSize.min, children: [
+        Icon(icon, size: 34, color: const Color(0xff9aa5a0)),
+        const SizedBox(height: 10),
+        Text(message,
+            textAlign: TextAlign.center,
+            style: const TextStyle(color: Color(0xff6b7671))),
+      ]));
+
+  Widget _staffList(List<Map<String, dynamic>> users) {
+    if (users.isEmpty) {
+      return _emptyState(LucideIcons.users,
+          'No staff to show yet.\nConnect to the server once to load your staff, or add one to queue it.');
+    }
+    return ListView.separated(
       itemCount: users.length,
       separatorBuilder: (_, __) => const Divider(height: 1),
       itemBuilder: (context, index) {
@@ -184,8 +210,8 @@ class _ManagementScreenState extends State<ManagementScreen> {
               ],
             ]),
             subtitle: Text(user['username'] != null
-                ? '@${user['username']}  |  ${user['email']}'
-                : user['email'] as String),
+                ? '@${user['username']}  |  ${user['email'] ?? ''}'
+                : (user['email']?.toString() ?? '')),
             trailing: Row(mainAxisSize: MainAxisSize.min, children: [
               Text(_title(user['role'] as String),
                   style: const TextStyle(
@@ -196,7 +222,13 @@ class _ManagementScreenState extends State<ManagementScreen> {
             ]),
             onTap: () => _userEditor(existing: user));
       });
-  Widget _auditList(List<Map<String, dynamic>> logs) => ListView.separated(
+  }
+
+  Widget _auditList(List<Map<String, dynamic>> logs) {
+    if (logs.isEmpty) {
+      return _emptyState(LucideIcons.history, 'No audit records to show yet.');
+    }
+    return ListView.separated(
       itemCount: logs.length,
       separatorBuilder: (_, __) => const Divider(height: 1),
       itemBuilder: (context, index) {
@@ -210,6 +242,7 @@ class _ManagementScreenState extends State<ManagementScreen> {
             trailing: Text(_title(log['subject_type'] as String),
                 style: Theme.of(context).textTheme.bodySmall));
       });
+  }
 
   Future<void> _userEditor({Map<String, dynamic>? existing}) async {
     final editing = existing != null;
@@ -308,12 +341,31 @@ class _ManagementScreenState extends State<ManagementScreen> {
                             await widget.database.setting('server_url');
                         final token = await widget.database.setting('token');
                         if (server == null || token == null) return;
+                        final uname = username.text.trim();
+                        final pwd = password.text;
+                        final displayName = name.text.trim();
+                        // Remember this account on this device so the new user
+                        // can sign in even while the server is unreachable and
+                        // before the account has synced. Skipped on an edit that
+                        // leaves the password blank (nothing to re-hash).
+                        Future<void> cacheLocalLogin() async {
+                          if (pwd.isEmpty) return;
+                          final branchId =
+                              await widget.database.setting('branch_id') ?? '';
+                          await widget.database.cacheCredential(
+                              username: uname,
+                              password: pwd,
+                              userName: displayName,
+                              userRole: role,
+                              branchId: branchId,
+                              token: token);
+                        }
                         try {
                           final api =
                               ApiClient(Uri.parse(server), token: token);
                           if (editing) {
                             await api.updateManagementUser(
-                                id: existing['id'] as String,
+                                id: existing['id'].toString(),
                                 name: name.text.trim(),
                                 email: email.text.trim(),
                                 username: username.text.trim(),
@@ -328,6 +380,7 @@ class _ManagementScreenState extends State<ManagementScreen> {
                                 password: password.text,
                                 role: role);
                           }
+                          await cacheLocalLogin();
                           if (sheet.mounted) Navigator.pop(sheet, true);
                         } on ApiException catch (error) {
                           // Server reachable but rejected it (e.g. duplicate
@@ -336,12 +389,22 @@ class _ManagementScreenState extends State<ManagementScreen> {
                             ScaffoldMessenger.of(sheet).showSnackBar(
                                 SnackBar(content: Text(error.message)));
                           }
-                        } catch (_) {
+                        } catch (error) {
+                          if (error is! SocketException &&
+                              error is! http.ClientException) {
+                            // A real error, not a connectivity failure - show
+                            // it instead of silently queuing.
+                            if (sheet.mounted) {
+                              ScaffoldMessenger.of(sheet).showSnackBar(SnackBar(
+                                  content: Text(error.toString())));
+                            }
+                            return;
+                          }
                           // Server unreachable: apply locally and queue.
                           try {
                             if (editing) {
                               await widget.database.updateStaffUserOffline(
-                                  id: existing['id'] as String,
+                                  id: existing['id'].toString(),
                                   name: name.text.trim(),
                                   email: email.text.trim(),
                                   username: username.text.trim(),
@@ -357,6 +420,7 @@ class _ManagementScreenState extends State<ManagementScreen> {
                                   password: password.text,
                                   role: role);
                             }
+                            await cacheLocalLogin();
                             if (sheet.mounted) Navigator.pop(sheet, true);
                           } catch (error) {
                             if (sheet.mounted) {
@@ -434,18 +498,25 @@ class _ManagementScreenState extends State<ManagementScreen> {
     if (server == null || token == null) return;
     try {
       await ApiClient(Uri.parse(server), token: token)
-          .setManagementUserActive(existing['id'] as String, active);
+          .setManagementUserActive(existing['id'].toString(), active);
       if (sheet.mounted) Navigator.pop(sheet, true);
     } on ApiException catch (error) {
       if (sheet.mounted) {
         ScaffoldMessenger.of(sheet)
             .showSnackBar(SnackBar(content: Text(error.message)));
       }
-    } catch (_) {
+    } catch (error) {
+      if (error is! SocketException && error is! http.ClientException) {
+        if (sheet.mounted) {
+          ScaffoldMessenger.of(sheet)
+              .showSnackBar(SnackBar(content: Text(error.toString())));
+        }
+        return;
+      }
       // Server unreachable: apply locally and queue for sync.
       try {
         await widget.database
-            .setStaffUserActiveOffline(existing['id'] as String, active);
+            .setStaffUserActiveOffline(existing['id'].toString(), active);
         if (sheet.mounted) Navigator.pop(sheet, true);
       } catch (error) {
         if (sheet.mounted) {

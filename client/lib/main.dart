@@ -215,13 +215,59 @@ class _HomeShellState extends State<HomeShell> {
   // signed in before roles existed) sees everything, so nobody is locked out
   // during the transition.
   static const _moduleRoles = <String, Set<String>>{
-    'Sale': {'super_admin', 'admin', 'business_owner', 'store_manager', 'cashier'},
-    'Sales': {'super_admin', 'admin', 'business_owner', 'store_manager', 'cashier', 'auditor', 'accountant'},
-    'Register': {'super_admin', 'admin', 'business_owner', 'store_manager', 'cashier'},
-    'Dashboard': {'super_admin', 'admin', 'business_owner', 'store_manager', 'auditor', 'accountant'},
-    'Inventory': {'super_admin', 'admin', 'business_owner', 'store_manager', 'inventory_staff'},
-    'Products': {'super_admin', 'admin', 'business_owner', 'store_manager', 'inventory_staff'},
-    'Finance': {'super_admin', 'admin', 'business_owner', 'store_manager', 'accountant', 'auditor'},
+    'Sale': {
+      'super_admin',
+      'admin',
+      'business_owner',
+      'store_manager',
+      'cashier'
+    },
+    'Sales': {
+      'super_admin',
+      'admin',
+      'business_owner',
+      'store_manager',
+      'cashier',
+      'auditor',
+      'accountant'
+    },
+    'Register': {
+      'super_admin',
+      'admin',
+      'business_owner',
+      'store_manager',
+      'cashier'
+    },
+    'Dashboard': {
+      'super_admin',
+      'admin',
+      'business_owner',
+      'store_manager',
+      'auditor',
+      'accountant'
+    },
+    'Inventory': {
+      'super_admin',
+      'admin',
+      'business_owner',
+      'store_manager',
+      'inventory_staff'
+    },
+    'Products': {
+      'super_admin',
+      'admin',
+      'business_owner',
+      'store_manager',
+      'inventory_staff'
+    },
+    'Finance': {
+      'super_admin',
+      'admin',
+      'business_owner',
+      'store_manager',
+      'accountant',
+      'auditor'
+    },
     'Settings': {'super_admin', 'admin', 'business_owner'},
   };
 
@@ -392,7 +438,8 @@ class _HomeShellState extends State<HomeShell> {
             SafeArea(
               top: false,
               child: ListTile(
-                leading: const Icon(LucideIcons.logOut, color: Color(0xffb91c1c)),
+                leading:
+                    const Icon(LucideIcons.logOut, color: Color(0xffb91c1c)),
                 title: const Text('Sign out',
                     style: TextStyle(
                         fontWeight: FontWeight.w700, color: Color(0xffb91c1c))),
@@ -627,8 +674,7 @@ class _EmptyCart extends StatelessWidget {
 }
 
 class PosScreen extends StatefulWidget {
-  const PosScreen(
-      {super.key, required this.database, this.onRequestRegister});
+  const PosScreen({super.key, required this.database, this.onRequestRegister});
   final LocalDatabase database;
   final VoidCallback? onRequestRegister;
 
@@ -803,9 +849,8 @@ class _PosScreenState extends State<PosScreen> {
             // On mobile the toggle is the last element in the row, so pin its
             // icon to the right edge instead of leaving the tap-target's gap
             // (on desktop the 'Scan item' button sits to its right).
-            alignment: Platform.isAndroid
-                ? Alignment.centerRight
-                : Alignment.center,
+            alignment:
+                Platform.isAndroid ? Alignment.centerRight : Alignment.center,
             onPressed: () =>
                 setState(() => _listCatalogView = !listCatalogView),
             icon: Icon(
@@ -917,63 +962,76 @@ class _PosScreenState extends State<PosScreen> {
                 return Card(
                   margin: EdgeInsets.zero,
                   clipBehavior: Clip.antiAlias,
-                  child: InkWell(
-                    onTap: () => _addToCart(product),
-                    child: Padding(
-                      padding: const EdgeInsets.all(14),
-                      child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(children: [
-                              Container(
-                                width: 34,
-                                height: 34,
-                                alignment: Alignment.center,
-                                decoration: const BoxDecoration(
-                                    color: Color(0xffe9f5ec),
-                                    borderRadius:
-                                        BorderRadius.all(Radius.circular(6))),
-                                child: const Icon(LucideIcons.package,
-                                    size: 18, color: Color(0xff16803d)),
+                  child: Tooltip(
+                    message: product['name']! as String,
+                    waitDuration: const Duration(milliseconds: 400),
+                    child: InkWell(
+                      onTap: () => _addToCart(product),
+                      child: Padding(
+                        padding: const EdgeInsets.all(14),
+                        child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(children: [
+                                Container(
+                                  width: 34,
+                                  height: 34,
+                                  alignment: Alignment.center,
+                                  decoration: const BoxDecoration(
+                                      color: Color(0xffe9f5ec),
+                                      borderRadius:
+                                          BorderRadius.all(Radius.circular(6))),
+                                  child: const Icon(LucideIcons.package,
+                                      size: 18, color: Color(0xff16803d)),
+                                ),
+                                const Spacer(),
+                                IconButton(
+                                  onPressed: () => _addToCart(product),
+                                  tooltip: 'Add to cart',
+                                  visualDensity: VisualDensity.compact,
+                                  padding: EdgeInsets.zero,
+                                  constraints: const BoxConstraints(
+                                      minWidth: 34,
+                                      minHeight: 34,
+                                      maxHeight: 34),
+                                  icon: const Icon(LucideIcons.circlePlus,
+                                      color: Color(0xff16803d)),
+                                ),
+                              ]),
+                              const SizedBox(height: 10),
+                              Expanded(
+                                child: Align(
+                                  alignment: Alignment.topLeft,
+                                  child: Text(product['name']! as String,
+                                      maxLines: 2,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: const TextStyle(
+                                          fontWeight: FontWeight.w700)),
+                                ),
                               ),
-                              const Spacer(),
-                              IconButton(
-                                onPressed: () => _addToCart(product),
-                                tooltip: 'Add to cart',
-                                visualDensity: VisualDensity.compact,
-                                icon: const Icon(LucideIcons.circlePlus,
-                                    color: Color(0xff16803d)),
-                              ),
-                            ]),
-                            const SizedBox(height: 10),
-                            Text(product['name']! as String,
-                                maxLines: 2,
+                              Text(
+                                  'PHP ${(product['selling_price'] as num).toStringAsFixed(2)}',
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .titleMedium
+                                      ?.copyWith(
+                                          color: const Color(0xff16803d),
+                                          fontWeight: FontWeight.w800)),
+                              const SizedBox(height: 4),
+                              Text(
+                                '${product['quantity']} ${product['unit']} available',
+                                maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(
-                                    fontWeight: FontWeight.w700)),
-                            const Spacer(),
-                            Text(
-                                'PHP ${(product['selling_price'] as num).toStringAsFixed(2)}',
                                 style: Theme.of(context)
                                     .textTheme
-                                    .titleMedium
+                                    .bodySmall
                                     ?.copyWith(
-                                        color: const Color(0xff16803d),
-                                        fontWeight: FontWeight.w800)),
-                            const SizedBox(height: 4),
-                            Text(
-                              '${product['quantity']} ${product['unit']} available',
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: Theme.of(context)
-                                  .textTheme
-                                  .bodySmall
-                                  ?.copyWith(
-                                      color: lowStock
-                                          ? const Color(0xffb45309)
-                                          : null),
-                            ),
-                          ]),
+                                        color: lowStock
+                                            ? const Color(0xffb45309)
+                                            : null),
+                              ),
+                            ]),
+                      ),
                     ),
                   ),
                 );
@@ -1114,7 +1172,8 @@ class _PosScreenState extends State<PosScreen> {
                                               decoration:
                                                   TextDecoration.underline,
                                               decorationStyle:
-                                                  TextDecorationStyle.dotted))))),
+                                                  TextDecorationStyle
+                                                      .dotted))))),
                           _QuantityButton(
                               icon: LucideIcons.plus,
                               tooltip: 'Add one',

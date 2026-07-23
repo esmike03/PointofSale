@@ -503,6 +503,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final token = await widget.database.setting('token');
     final deviceId = await widget.database.setting('device_id');
     if (serverUrl == null || token == null || deviceId == null) return;
+    if (token.isEmpty) {
+      _show('Sign in to sync with the server.');
+      await _signOut();
+      return;
+    }
     try {
       setState(() => loading = true);
       await SyncService(widget.database, Uri.parse(serverUrl), token, deviceId)
@@ -519,6 +524,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ? 'Sync finished with ${summary['failed_count']} item(s) needing attention.'
           : 'Synchronization complete.');
     } on ApiException catch (error) {
+      if (error.isUnauthenticated) {
+        // The stored token is dead (expired, revoked, or the server was
+        // reset). Clear it and send the user back to sign in for a fresh one.
+        _show('Your session has expired. Please sign in again to sync.');
+        if (mounted) setState(() => loading = false);
+        await _signOut();
+        return;
+      }
       _show(error.message);
     } catch (error) {
       _show('Synchronization failed: $error');

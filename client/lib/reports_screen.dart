@@ -24,8 +24,11 @@ class _ReportsScreenState extends State<ReportsScreen> {
   }
 
   Future<void> _reload() async {
-    setState(() => _data = _ReportData.load(widget.database, _days));
-    await _data;
+    final future = _ReportData.load(widget.database, _days);
+    setState(() {
+      _data = future;
+    });
+    await future;
   }
 
   @override
