@@ -1,0 +1,3143 @@
+@import "tailwindcss";
+
+@font-face {
+  font-family: "Manrope";
+  src: url("/fonts/Manrope-Regular.otf") format("opentype");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Manrope";
+  src: url("/fonts/Manrope-Medium.otf") format("opentype");
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Manrope";
+  src: url("/fonts/Manrope-SemiBold.otf") format("opentype");
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Manrope";
+  src: url("/fonts/Manrope-Bold.otf") format("opentype");
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+:root {
+  --green: #16803d;
+  --green-dark: #0f5f2e;
+  --green-soft: #eaf7ee;
+  --ink: #12231b;
+  --muted: #5f6e66;
+  --line: #dfe7e2;
+  --cloud: #f5f8f6;
+  --white: #ffffff;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  margin: 0;
+  background: var(--white);
+  color: var(--ink);
+  font-family: "Manrope", Arial, sans-serif;
+  font-size: 16px;
+  letter-spacing: 0;
+}
+
+button,
+a {
+  font: inherit;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+button {
+  border: 0;
+}
+
+/* Minimalist scrollbars: thin, rounded, no track or arrows. */
+* {
+  scrollbar-width: thin; /* Firefox */
+  scrollbar-color: rgba(18, 35, 27, 0.2) transparent;
+}
+
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+*::-webkit-scrollbar-track,
+*::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background: rgba(18, 35, 27, 0.2);
+  background-clip: content-box;
+  transition: background 180ms ease;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: rgba(18, 35, 27, 0.38);
+  background-clip: content-box;
+}
+
+*::-webkit-scrollbar-button {
+  display: none;
+}
+
+.site-header {
+  position: fixed;
+  z-index: 50;
+  top: 14px;
+  left: 0;
+  width: 100%;
+  padding: 0 24px;
+  pointer-events: none;
+}
+
+.nav-shell {
+  width: min(1120px, 100%);
+  height: 52px;
+  margin: 0 auto;
+  padding: 0 8px 0 14px;
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  box-shadow: none;
+  pointer-events: auto;
+}
+
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  font-size: 15px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.brand-mark {
+  width: 32px;
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  border-radius: 6px;
+  background: var(--green);
+  color: white;
+}
+
+.desktop-nav {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 28px;
+  margin-left: auto;
+}
+
+.desktop-nav a {
+  color: #46564e;
+  font-size: 13px;
+  font-weight: 600;
+  transition: color 180ms ease;
+}
+
+.desktop-nav a:hover {
+  color: var(--green);
+}
+
+.nav-cta,
+.primary-button,
+.light-button,
+.plan-button {
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  padding: 0 22px;
+  border-radius: 999px;
+  font-size: 14px;
+  font-weight: 700;
+  white-space: nowrap;
+  transition: transform 180ms ease, background 180ms ease, border-color 180ms ease;
+}
+
+.nav-cta,
+.primary-button {
+  background: var(--green);
+  color: white;
+}
+
+.nav-cta:hover,
+.primary-button:hover {
+  background: var(--green-dark);
+  transform: translateY(-1px);
+}
+
+/* The nav button stays smaller than the page-level CTAs. */
+.nav-cta {
+  min-height: 36px;
+  padding: 0 16px;
+  font-size: 13px;
+}
+
+.menu-button {
+  width: 38px;
+  height: 38px;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  margin-left: auto;
+  border-radius: 6px;
+  background: var(--cloud);
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.mobile-menu {
+  width: min(1120px, calc(100% - 48px));
+  margin: 8px auto 0;
+  padding: 14px;
+  display: grid;
+  gap: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.8);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 18px 44px rgba(18, 35, 27, 0.12);
+  backdrop-filter: blur(16px);
+  pointer-events: auto;
+}
+
+.mobile-menu > a:not(.nav-cta) {
+  padding: 12px 8px;
+  font-weight: 600;
+}
+
+.hero {
+  position: relative;
+  min-height: min(810px, 88vh);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  overflow: hidden;
+  background: #eef4ef;
+}
+
+.hero-image {
+  object-fit: cover;
+  object-position: center;
+}
+
+.hero-shade {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(255,255,255,0.94) 0%, rgba(255,255,255,0.76) 36%, rgba(255,255,255,0.06) 73%);
+}
+
+.hero-content {
+  position: relative;
+  z-index: 2;
+  width: min(850px, calc(100% - 40px));
+  padding-top: 130px;
+  text-align: center;
+}
+
+.section-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--green);
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.3;
+}
+
+.hero h1 {
+  margin: 0 0 8px;
+  color: var(--ink);
+  font-size: clamp(58px, 8vw, 104px);
+  line-height: 0.98;
+  font-weight: 800;
+}
+
+.hero-content > p {
+  max-width: 650px;
+  margin: 0 auto;
+  color: #35483e;
+  font-size: clamp(18px, 2.4vw, 26px);
+  line-height: 1.45;
+  font-weight: 500;
+}
+
+.hero-actions {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 28px;
+}
+
+.hero-actions a {
+  min-height: 50px;
+  padding: 0 26px;
+}
+
+.secondary-button {
+  min-height: 50px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 26px;
+  border: 1px solid rgba(18, 35, 27, 0.17);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.75);
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 700;
+  backdrop-filter: blur(10px);
+}
+
+.secondary-button:hover {
+  border-color: var(--green);
+}
+
+.hero-proof {
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 18px;
+  margin-top: 22px;
+  color: #42534a;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.hero-proof span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.hero-proof svg {
+  color: var(--green);
+}
+
+/* Scroll tutorial. Floats above the capability panel rather than taking a
+   row in the hero stack. Only the desktop deck shows it, and it retires
+   itself once the visitor has actually scrolled. */
+.scroll-hint {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 14px);
+  display: none;
+  align-items: center;
+  gap: 10px;
+  color: #46564e;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  transition: opacity 420ms ease, transform 420ms ease;
+}
+
+/* Dot separator instead of longer wording. */
+.scroll-hint .hint-keys::before {
+  content: "";
+  width: 3px;
+  height: 3px;
+  margin-right: 4px;
+  border-radius: 50%;
+  background: rgba(18, 35, 27, 0.28);
+}
+
+.scroll-hint.is-gone {
+  opacity: 0;
+  transform: translateY(6px);
+  pointer-events: none;
+}
+
+.hint-wheel {
+  position: relative;
+  width: 17px;
+  height: 26px;
+  flex: 0 0 auto;
+  border: 1.5px solid rgba(18, 35, 27, 0.32);
+  border-radius: 999px;
+}
+
+/* The dot falls like a wheel scroll: input down, page moves across. */
+.hint-wheel i {
+  position: absolute;
+  top: 6px;
+  left: 50%;
+  width: 3px;
+  height: 6px;
+  margin-left: -1.5px;
+  border-radius: 999px;
+  background: var(--green);
+  animation: hint-wheel 1.9s ease-in-out infinite;
+}
+
+@keyframes hint-wheel {
+  0%, 100% { opacity: 0; transform: translateY(0); }
+  25% { opacity: 1; }
+  70% { opacity: 0; transform: translateY(12px); }
+}
+
+.hint-keys {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.hint-keys kbd {
+  display: grid;
+  place-items: center;
+  min-width: 19px;
+  height: 19px;
+  padding: 0 4px;
+  border: 1px solid var(--line);
+  border-bottom-width: 2px;
+  border-radius: 5px;
+  background: rgba(255, 255, 255, 0.85);
+  color: var(--ink);
+  font-family: inherit;
+  font-size: 11px;
+}
+
+/* Capability row along the foot of the hero. A frosted panel rather than
+   hairline rules: it reads as one object over the photo, and it carries
+   its own legibility instead of needing the image dimmed behind it. */
+.hero-capabilities {
+  position: relative;
+  z-index: 2;
+  width: 100%;
+  margin-top: 32px;
+  padding: 18px 22px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px 26px;
+  border: 1px solid rgba(255, 255, 255, 0.72);
+  /* Stacked on small screens, so only a soft radius here; the deck makes
+     it a full pill once the four items sit on one row. */
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.62);
+  box-shadow: 0 18px 44px rgba(18, 35, 27, 0.09);
+  backdrop-filter: blur(14px);
+}
+
+.hero-capabilities span {
+  display: inline-flex;
+  align-items: center;
+  gap: 11px;
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+/* The icon sits in its own tile; padding on the svg makes the chip. */
+.hero-capabilities svg {
+  width: 34px;
+  height: 34px;
+  flex: 0 0 auto;
+  padding: 8px;
+  border-radius: 50%;
+  background: var(--green-soft);
+  color: var(--green);
+}
+
+.section {
+  width: min(1180px, calc(100% - 40px));
+  margin: 0 auto;
+  padding: 120px 0;
+}
+
+.section-heading {
+  max-width: 680px;
+}
+
+.section-heading.centered {
+  margin: 0 auto;
+  text-align: center;
+}
+
+.section-heading h2,
+.connectivity-copy h2,
+.detail-copy h2,
+.faq-heading h2,
+.final-cta h2 {
+  margin: 12px 0 16px;
+  font-size: clamp(34px, 4.4vw, 58px);
+  line-height: 1.08;
+  font-weight: 700;
+}
+
+.section-heading p,
+.connectivity-copy > p,
+.detail-copy > p,
+.faq-heading > p,
+.final-cta p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 17px;
+  line-height: 1.7;
+}
+
+.product-section {
+  overflow: hidden;
+}
+
+/* Device mockups. Each PNG is pre-cropped to the device itself, so the
+   screen sits at a fixed percentage inset measured from the artwork.
+   Laptop 1628x935: screen 11.241% / 6.096% / 77.518% / 84.706%
+   Phone   754x1555: screen  3.050% / 1.222% / 94.297% / 97.556%,
+   with the dynamic island ending at 5.659% of device height. */
+.device-stage {
+  position: relative;
+  margin-top: 58px;
+}
+
+.device-frame {
+  position: relative;
+  width: min(1080px, 100%);
+  margin: 0 auto;
+  transition: opacity 190ms ease, transform 190ms ease;
+}
+
+/* Held while the mockup swaps, so the geometry change is never seen. */
+.device-frame.is-switching {
+  opacity: 0;
+  transform: scale(0.985);
+}
+
+.device-frame.phone {
+  width: min(300px, 100%);
+}
+
+.device-image {
+  display: none;
+  width: 100%;
+  height: auto;
+}
+
+.device-frame .product-preview {
+  width: 100%;
+  margin: 0;
+}
+
+/* Out of flow, so the mockup gets the panel's full height. */
+.device-switch {
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  display: none;
+  justify-content: center;
+  gap: 2px;
+  margin-top: 16px;
+  padding: 3px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--white);
+  transform: translateX(-50%);
+}
+
+.device-switch button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 13px;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 180ms ease, color 180ms ease;
+}
+
+.device-switch button:hover {
+  color: var(--green);
+}
+
+.device-switch button.active {
+  background: var(--green);
+  color: white;
+}
+
+@media (min-width: 901px) {
+  .device-image,
+  .device-switch {
+    display: flex;
+  }
+
+  /* Drop the standalone frame styling: the artwork is the frame now. */
+  .device-frame .product-preview {
+    position: absolute;
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+  }
+
+  .device-frame.laptop .product-preview {
+    left: 11.241%;
+    top: 6.096%;
+    width: 77.518%;
+    height: 84.706%;
+  }
+
+  /* Scale the mockup's UI down so it reads like a real screen at this
+     size. Scoped to .device-frame (not the deck) so it also applies in
+     the 901-1023px range, where the mockups show but hscroll does not.
+     Kept above the .phone rules so those win on equal specificity. */
+  .device-frame .product-preview .preview-sidebar {
+    width: 54px;
+    gap: 8px;
+  }
+
+  .device-frame .product-preview .preview-sidebar .brand-mark {
+    width: 24px;
+    height: 24px;
+    margin-bottom: 18px;
+  }
+
+  .device-frame .product-preview .preview-nav {
+    width: 30px;
+    height: 30px;
+  }
+
+  .device-frame .product-preview .preview-nav svg {
+    width: 13px;
+    height: 13px;
+  }
+
+  .device-frame .product-preview .preview-topbar {
+    height: 46px;
+    padding: 0 13px;
+  }
+
+  .device-frame .product-preview .preview-topbar strong {
+    font-size: 13px;
+  }
+
+  .device-frame .product-preview .preview-kicker {
+    font-size: 7px;
+  }
+
+  .device-frame .product-preview .status-pill {
+    font-size: 9px;
+  }
+
+  .device-frame .product-preview .status-pill > span {
+    width: 6px;
+    height: 6px;
+    box-shadow: 0 0 0 3px #e6f7ec;
+  }
+
+  .device-frame .product-preview .preview-products,
+  .device-frame .product-preview .preview-cart,
+  .device-frame .product-preview .preview-panel {
+    padding: 13px;
+  }
+
+  .device-frame .product-preview .preview-panel {
+    gap: 12px;
+  }
+
+  .device-frame .product-preview .preview-search {
+    height: 29px;
+    padding: 0 10px;
+    font-size: 10px;
+  }
+
+  .device-frame .product-preview .preview-product-list {
+    gap: 6px;
+    margin-top: 11px;
+  }
+
+  .device-frame .product-preview .preview-product {
+    gap: 9px;
+    padding: 7px 9px;
+  }
+
+  .device-frame .product-preview .product-swatch {
+    width: 27px;
+    height: 27px;
+  }
+
+  .device-frame .product-preview .preview-product strong,
+  .device-frame .product-preview .product-price {
+    font-size: 10px;
+  }
+
+  .device-frame .product-preview .preview-product small {
+    font-size: 8px;
+  }
+
+  .device-frame .product-preview .cart-heading {
+    padding-bottom: 10px;
+  }
+
+  .device-frame .product-preview .cart-heading strong {
+    font-size: 11px;
+  }
+
+  .device-frame .product-preview .cart-heading span {
+    font-size: 9px;
+  }
+
+  .device-frame .product-preview .cart-row {
+    padding: 9px 0;
+    font-size: 9px;
+  }
+
+  .device-frame .product-preview .cart-total {
+    padding: 11px 0;
+  }
+
+  .device-frame .product-preview .cart-total strong {
+    font-size: 14px;
+  }
+
+  .device-frame .product-preview .preview-pay {
+    height: 31px;
+    font-size: 11px;
+  }
+
+  .device-frame .product-preview .preview-pay svg {
+    width: 13px;
+    height: 13px;
+  }
+
+  .device-frame .product-preview .panel-head strong {
+    font-size: 15px;
+  }
+
+  .device-frame .product-preview .panel-head span {
+    font-size: 9px;
+  }
+
+  .device-frame .product-preview .stock-row {
+    padding: 8px 11px;
+    font-size: 10px;
+  }
+
+  .device-frame .product-preview .stock-row strong {
+    font-size: 10px;
+  }
+
+  .device-frame .product-preview .stock-status {
+    padding: 3px 7px;
+    font-size: 9px;
+  }
+
+  .device-frame .product-preview .receipt-row {
+    padding: 8px 11px;
+    gap: 10px;
+  }
+
+  .device-frame .product-preview .receipt-icon {
+    width: 26px;
+    height: 26px;
+  }
+
+  .device-frame .product-preview .receipt-icon svg {
+    width: 12px;
+    height: 12px;
+  }
+
+  .device-frame .product-preview .receipt-row strong,
+  .device-frame .product-preview .receipt-amount {
+    font-size: 10px;
+  }
+
+  .device-frame .product-preview .receipt-row small {
+    font-size: 8px;
+  }
+
+  .device-frame .product-preview .metric-grid > div {
+    gap: 5px;
+    padding: 11px;
+  }
+
+  .device-frame .product-preview .metric-grid svg {
+    width: 15px;
+    height: 15px;
+  }
+
+  .device-frame .product-preview .metric-grid span {
+    font-size: 9px;
+  }
+
+  .device-frame .product-preview .metric-grid strong {
+    font-size: 12px;
+  }
+
+  /* Laptop only. Both tracks are proportional and the card grid fills by
+     available width, so a short window (which shrinks the mockup) drops to
+     two columns instead of crushing three. */
+  .device-frame.laptop .preview-content {
+    grid-template-columns: 1fr 34%;
+  }
+
+
+  /* Starts below the dynamic island so the artwork's notch stays visible. */
+  .device-frame.phone .product-preview {
+    left: 3.05%;
+    top: 7.2%;
+    width: 94.297%;
+    height: 91.3%;
+    overflow: hidden;
+    border-radius: 0 0 26px 26px;
+    flex-direction: column-reverse;
+  }
+
+  /* Phone: the rail becomes a bottom tab bar. */
+  .device-frame.phone .preview-sidebar {
+    width: 100%;
+    padding: 7px 0;
+    flex-direction: row;
+    justify-content: space-around;
+    gap: 0;
+    border-right: 0;
+    border-top: 1px solid var(--line);
+  }
+
+  .device-frame.phone .preview-sidebar .brand-mark {
+    display: none;
+  }
+
+  .device-frame.phone .preview-topbar {
+    height: 44px;
+    padding: 0 12px;
+  }
+
+  /* Phone checkout: the product list fills the screen, with a compact
+     total + pay bar pinned beneath it. */
+  .device-frame.phone .preview-content {
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .device-frame.phone .preview-products {
+    min-height: 0;
+    flex: 1;
+    overflow: hidden;
+  }
+
+  .device-frame.phone .preview-cart {
+    flex: 0 0 auto;
+    height: auto;
+    border-top: 1px solid var(--line);
+    border-left: 0;
+  }
+
+  .device-frame.phone .cart-heading,
+  .device-frame.phone .cart-row {
+    display: none;
+  }
+
+  .device-frame.phone .cart-total {
+    margin: 0 0 8px;
+    padding: 0;
+  }
+
+  /* The phone screen is only ~180-250px wide, so everything runs a full
+     step smaller than the laptop and secondary text is dropped. */
+  .device-frame.phone .preview-products,
+  .device-frame.phone .preview-cart,
+  .device-frame.phone .preview-panel {
+    padding: 9px;
+  }
+
+  .device-frame.phone .preview-panel {
+    gap: 9px;
+  }
+
+  /* The tab bar must never be squeezed by the content above it. */
+  .device-frame.phone .preview-sidebar {
+    flex: 0 0 auto;
+    padding: 5px 0;
+  }
+
+  .device-frame.phone .preview-nav {
+    width: 22px;
+    height: 22px;
+  }
+
+  .device-frame.phone .preview-nav svg {
+    width: 11px;
+    height: 11px;
+  }
+
+  .device-frame.phone .preview-topbar {
+    height: 36px;
+  }
+
+  .device-frame.phone .preview-topbar strong {
+    font-size: 11px;
+  }
+
+  .device-frame.phone .preview-kicker {
+    font-size: 6px;
+  }
+
+  .device-frame.phone .status-pill {
+    font-size: 7px;
+  }
+
+  /* Block (not flex) so text-overflow applies; line-height centres it. */
+  .device-frame.phone .preview-search {
+    height: 22px;
+    padding: 0 8px;
+    display: block;
+    overflow: hidden;
+    font-size: 8px;
+    line-height: 22px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .device-frame.phone .preview-product-list {
+    gap: 4px;
+    margin-top: 7px;
+  }
+
+  .device-frame.phone .preview-product {
+    gap: 6px;
+    padding: 5px 7px;
+  }
+
+  /* Four rows is all the short screen needs. */
+  .device-frame.phone .preview-product:nth-child(n + 5) {
+    display: none;
+  }
+
+  .device-frame.phone .product-swatch {
+    width: 18px;
+    height: 18px;
+    border-radius: 4px;
+  }
+
+  .device-frame.phone .preview-product strong,
+  .device-frame.phone .product-price {
+    font-size: 8px;
+  }
+
+  /* Stock counts are noise at this size; name and price carry the row. */
+  .device-frame.phone .preview-product small {
+    display: none;
+  }
+
+  .device-frame.phone .cart-total span {
+    font-size: 9px;
+  }
+
+  .device-frame.phone .cart-total strong {
+    font-size: 11px;
+  }
+
+  .device-frame.phone .preview-pay {
+    height: 24px;
+    gap: 5px;
+    font-size: 9px;
+  }
+
+  .device-frame.phone .preview-pay svg {
+    width: 10px;
+    height: 10px;
+  }
+
+  .device-frame.phone .panel-head strong {
+    font-size: 12px;
+  }
+
+  .device-frame.phone .panel-head span {
+    font-size: 8px;
+  }
+
+  .device-frame.phone .stock-row {
+    grid-template-columns: 1fr 22px 42px;
+    gap: 6px;
+    padding: 6px 8px;
+    font-size: 8px;
+  }
+
+  .device-frame.phone .stock-row strong {
+    font-size: 8px;
+  }
+
+  .device-frame.phone .stock-status {
+    padding: 2px 5px;
+    font-size: 7px;
+  }
+
+  .device-frame.phone .receipt-list {
+    gap: 5px;
+  }
+
+  .device-frame.phone .receipt-row {
+    gap: 8px;
+    padding: 6px 8px;
+  }
+
+  .device-frame.phone .receipt-icon {
+    width: 20px;
+    height: 20px;
+  }
+
+  .device-frame.phone .receipt-icon svg {
+    width: 10px;
+    height: 10px;
+  }
+
+  .device-frame.phone .receipt-row strong,
+  .device-frame.phone .receipt-amount {
+    font-size: 8px;
+  }
+
+  .device-frame.phone .receipt-row small {
+    font-size: 7px;
+  }
+
+  .device-frame.phone .metric-grid > div {
+    gap: 3px;
+    padding: 8px;
+  }
+
+  .device-frame.phone .metric-grid svg {
+    width: 12px;
+    height: 12px;
+  }
+
+  .device-frame.phone .metric-grid span {
+    font-size: 7px;
+  }
+
+  .device-frame.phone .metric-grid strong {
+    font-size: 10px;
+  }
+
+  .device-frame.phone .stock-row {
+    grid-template-columns: 1fr 30px 54px;
+    gap: 8px;
+    padding: 9px 10px;
+    font-size: 10px;
+  }
+
+  .device-frame.phone .receipt-row {
+    padding: 9px 10px;
+  }
+
+  .device-frame.phone .preview-panel .metric-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.product-preview {
+  width: min(1080px, 100%);
+  height: 610px;
+  margin: 58px auto 0;
+  display: flex;
+  overflow: hidden;
+  border: 1px solid #cfdad3;
+  border-radius: 8px;
+  background: #f8faf9;
+  box-shadow: 0 35px 75px rgba(18, 35, 27, 0.13);
+}
+
+.preview-sidebar {
+  width: 76px;
+  padding: 18px 0;
+  display: flex;
+  align-items: center;
+  flex-direction: column;
+  gap: 13px;
+  border-right: 1px solid var(--line);
+  background: white;
+}
+
+.preview-sidebar .brand-mark {
+  margin-bottom: 30px;
+}
+
+.preview-nav {
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #819088;
+  cursor: pointer;
+  transition: background 180ms ease, color 180ms ease;
+}
+
+.preview-nav:hover {
+  background: var(--cloud);
+  color: var(--green);
+}
+
+.preview-nav.active {
+  background: var(--green-soft);
+  color: var(--green);
+}
+
+.preview-main {
+  /* min-height:0 lets this shrink inside the phone's column layout;
+     without it the bottom of the screen (the pay button) gets clipped. */
+  min-width: 0;
+  min-height: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.preview-topbar {
+  height: 86px;
+  padding: 0 26px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--line);
+  background: white;
+}
+
+.preview-topbar > div {
+  display: grid;
+  gap: 4px;
+}
+
+.preview-kicker {
+  color: var(--green);
+  font-size: 9px;
+  font-weight: 800;
+}
+
+.preview-topbar strong {
+  font-size: 20px;
+}
+
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: #53645b;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.status-pill > span {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #2bbd63;
+  box-shadow: 0 0 0 4px #e6f7ec;
+}
+
+.preview-content {
+  min-height: 0;
+  flex: 1;
+  display: grid;
+  grid-template-columns: 1fr 330px;
+  /* minmax(0,1fr) pins the row to the container height. A plain auto row
+     grows to fit the product list, which pushes the cart's pay button
+     past the bottom of the screen, where overflow:hidden clips it. */
+  grid-template-rows: minmax(0, 1fr);
+}
+
+.preview-products {
+  /* Grid items default to min-width/min-height:auto, which lets the row
+     blow out its track and spill over the cart rail. */
+  min-width: 0;
+  min-height: 0;
+  padding: 24px;
+  overflow: hidden;
+}
+
+.preview-search {
+  height: 44px;
+  display: flex;
+  align-items: center;
+  padding: 0 14px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: white;
+  color: #9aa69f;
+  font-size: 12px;
+}
+
+/* Product rows. A list stays legible at any screen width, where a card
+   grid gets crushed once the mockup shrinks. */
+.preview-product-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.preview-product {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 9px 11px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: white;
+}
+
+.product-swatch {
+  width: 34px;
+  height: 34px;
+  flex: 0 0 auto;
+  border-radius: 5px;
+  background: #d6eadc;
+}
+
+.product-swatch.ink {
+  background: #26392f;
+}
+
+.product-swatch.amber {
+  background: #f0d9a6;
+}
+
+.product-meta {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+  margin-right: auto;
+}
+
+.preview-product strong {
+  overflow: hidden;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.preview-product small {
+  color: #839087;
+  font-size: 10px;
+}
+
+.product-price {
+  flex: 0 0 auto;
+  color: var(--green);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.preview-cart {
+  min-height: 0;
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  border-left: 1px solid var(--line);
+  background: white;
+}
+
+.cart-heading,
+.cart-row,
+.cart-total {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 15px;
+}
+
+.cart-heading {
+  padding-bottom: 18px;
+  border-bottom: 1px solid var(--line);
+}
+
+.cart-heading span {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.cart-row {
+  padding: 16px 0;
+  border-bottom: 1px solid #edf1ee;
+  font-size: 11px;
+}
+
+.cart-total {
+  margin-top: auto;
+  padding: 20px 0;
+}
+
+.cart-total strong {
+  font-size: 20px;
+}
+
+.preview-pay {
+  height: 46px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border-radius: 5px;
+  background: var(--green);
+  color: white;
+  font-weight: 700;
+}
+
+/* Alternate views behind the preview sidebar tabs. */
+.preview-panel {
+  min-height: 0;
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  overflow: hidden;
+}
+
+.panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.panel-head > div {
+  display: grid;
+  gap: 3px;
+}
+
+.panel-head span {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.panel-head strong {
+  font-size: 22px;
+}
+
+.panel-head .trend {
+  color: var(--green);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.preview-panel .bars {
+  height: auto;
+  flex: 1;
+  min-height: 0;
+  margin: 0;
+}
+
+.preview-panel .metric-grid {
+  flex: 0 0 auto;
+}
+
+.stock-table {
+  min-height: 0;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: white;
+}
+
+.stock-row {
+  display: grid;
+  grid-template-columns: 1fr 70px 88px;
+  align-items: center;
+  gap: 12px;
+  padding: 13px 16px;
+  border-bottom: 1px solid #edf1ee;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.stock-row:last-child {
+  border-bottom: 0;
+}
+
+.stock-row.head {
+  background: var(--cloud);
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.stock-row strong {
+  overflow: hidden;
+  color: var(--ink);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.stock-status {
+  justify-self: start;
+  padding: 4px 9px;
+  border-radius: 999px;
+  background: var(--green-soft);
+  color: var(--green);
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.stock-status.low {
+  background: #fdf1dc;
+  color: #8f6212;
+}
+
+.stock-status.out {
+  background: #fbe7e7;
+  color: #a13a3a;
+}
+
+.receipt-list {
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  overflow: hidden;
+}
+
+.receipt-row {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  padding: 12px 16px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: white;
+}
+
+.receipt-row > div {
+  display: grid;
+  gap: 2px;
+  margin-right: auto;
+}
+
+.receipt-row strong {
+  font-size: 12px;
+}
+
+.receipt-row small {
+  color: #839087;
+  font-size: 10px;
+}
+
+.receipt-icon {
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  border-radius: 6px;
+  background: var(--green-soft);
+  color: var(--green);
+}
+
+.receipt-amount {
+  font-size: 13px;
+}
+
+/* Scroll reveal. JS adds .reveal only to elements that start off-screen,
+   then .is-visible when they scroll in. Elements already on screen are
+   never touched, so first paint never flashes. */
+.reveal {
+  opacity: 0;
+  transform: translateY(18px);
+  transition: opacity 700ms cubic-bezier(0.22, 0.61, 0.36, 1),
+    transform 700ms cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+
+.reveal.is-visible {
+  opacity: 1;
+  transform: none;
+}
+
+.feature-section {
+  border-top: 1px solid var(--line);
+}
+
+/* Spaced cards rather than a hairline-joined grid. */
+.feature-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 14px;
+  margin-top: 58px;
+}
+
+.feature-card {
+  min-height: 230px;
+  padding: 30px 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  border: 1px solid rgba(18, 35, 27, 0.08);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.72);
+  box-shadow: 0 10px 30px rgba(18, 35, 27, 0.05);
+  transition: transform 220ms ease, box-shadow 220ms ease, border-color 220ms ease;
+}
+
+.feature-card:hover {
+  transform: translateY(-3px);
+  border-color: rgba(22, 128, 61, 0.28);
+  box-shadow: 0 18px 40px rgba(18, 35, 27, 0.09);
+}
+
+/* The artwork has an opaque white background, so multiply drops it onto
+   the card instead of showing a pale square behind each icon. */
+.feature-icon {
+  width: 62px;
+  height: 62px;
+  display: grid;
+  place-items: center;
+  margin-bottom: 18px;
+}
+
+.feature-icon img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  mix-blend-mode: multiply;
+  opacity: 0.62;
+}
+
+.feature-card h3 {
+  margin: 0 0 8px;
+  color: var(--green);
+  font-size: 18px;
+}
+
+.feature-card p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.connectivity-band {
+  background: var(--white);
+  color: var(--ink);
+}
+
+.connectivity-inner {
+  width: min(1180px, calc(100% - 40px));
+  min-height: 690px;
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: 0.9fr 1.1fr;
+  align-items: center;
+  gap: 90px;
+}
+
+/* .light stays bright for the green closing CTA; the connectivity band
+   is white now, so it takes the standard palette instead. */
+.section-label.light {
+  color: #71db97;
+}
+
+.connectivity-band .section-label.light {
+  color: var(--green);
+}
+
+.connectivity-copy > p {
+  color: var(--muted);
+}
+
+.connectivity-points {
+  display: grid;
+  gap: 15px;
+  margin-top: 30px;
+}
+
+.connectivity-points span {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: #4f6057;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.connectivity-points svg {
+  color: var(--green);
+}
+
+.sync-visual {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* One diagram: both device outlines, the arcs they exchange data along,
+   and the captions — so everything stays aligned at any size. */
+.sync-diagram {
+  width: 100%;
+  max-width: 440px;
+  height: auto;
+  fill: none;
+}
+
+
+.sync-diagram .shell,
+.sync-diagram .stand {
+  stroke: rgba(18, 35, 27, 0.5);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.sync-diagram .detail {
+  stroke: rgba(22, 128, 61, 0.38);
+  stroke-width: 2;
+  stroke-linecap: round;
+}
+
+.sync-diagram .orbit {
+  stroke: rgba(22, 128, 61, 0.26);
+  stroke-width: 1.5;
+}
+
+/* Mask channels. These need CSS fills because the fill:none on
+   .sync-diagram would override a fill="" attribute and blank the mask. */
+.sync-diagram .mask-show {
+  fill: #ffffff;
+}
+
+.sync-diagram .mask-hide {
+  fill: #000000;
+}
+
+/* fill must come from CSS, not a fill="" attribute: the fill:none on
+   .sync-diagram would override the presentation attribute. */
+.sync-diagram .flow-core {
+  fill: var(--green);
+  stroke: none;
+}
+
+.sync-diagram .flow-glow {
+  fill: url(#flowGlow);
+  stroke: none;
+}
+
+.sync-diagram .caption {
+  fill: var(--ink);
+  font-size: 15px;
+  font-weight: 700;
+  stroke: none;
+}
+
+.sync-diagram .caption.sub {
+  fill: var(--green);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.details-section {
+  display: grid;
+  grid-template-columns: 0.85fr 1.15fr;
+  align-items: center;
+  gap: 100px;
+}
+
+.text-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 26px;
+  color: var(--green);
+  font-weight: 700;
+}
+
+.metrics-panel {
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+.metric-main {
+  display: grid;
+}
+
+.metric-main > span {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.metric-main > strong {
+  margin: 6px 0;
+  font-size: clamp(28px, 4vw, 42px);
+  white-space: nowrap;
+}
+
+.metric-main small {
+  color: var(--muted);
+}
+
+.metrics-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.delta {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  margin-right: 4px;
+  border-radius: 999px;
+  background: var(--green-soft);
+  color: var(--green);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.range-chips {
+  display: inline-flex;
+  flex: 0 0 auto;
+  gap: 2px;
+  padding: 3px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--white);
+}
+
+.range-chips span {
+  padding: 5px 11px;
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.range-chips .active {
+  background: var(--green);
+  color: white;
+}
+
+.sales-chart {
+  height: 200px;
+  margin: 28px 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.chart-plot {
+  position: relative;
+  min-height: 0;
+  flex: 1;
+}
+
+/* Reference lines sit behind the bars. */
+.chart-grid {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+.chart-grid span {
+  height: 1px;
+  background: rgba(18, 35, 27, 0.07);
+}
+
+/* The curve is drawn in a 0-100 box stretched to the plot area; the
+   stroke stays an even width thanks to vector-effect on the path. */
+.chart-svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.chart-line {
+  stroke: var(--green);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* Value dots are HTML, not SVG, so the stretched box cannot squash them. */
+.chart-points {
+  position: absolute;
+  inset: 0;
+}
+
+.chart-points > span {
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  margin: -4px 0 0 -4px;
+  border: 2px solid var(--green);
+  border-radius: 50%;
+  background: var(--white);
+}
+
+.chart-points > span.peak {
+  width: 12px;
+  height: 12px;
+  margin: -6px 0 0 -6px;
+  border-color: var(--white);
+  background: var(--green);
+  box-shadow: 0 0 0 4px rgba(22, 128, 61, 0.16), 0 6px 14px rgba(22, 128, 61, 0.3);
+}
+
+/* Value callout floating above the best day. */
+.peak-chip {
+  position: absolute;
+  bottom: calc(100% + 9px);
+  left: 50%;
+  padding: 4px 8px;
+  border-radius: 5px;
+  background: var(--ink);
+  color: white;
+  font-size: 10px;
+  font-weight: 700;
+  white-space: nowrap;
+  transform: translateX(-50%);
+}
+
+.peak-chip::after {
+  content: "";
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  margin-left: -4px;
+  border: 4px solid transparent;
+  border-top-color: var(--ink);
+}
+
+.chart-axis {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.chart-axis span {
+  flex: 1;
+  color: #8b978f;
+  font-size: 10px;
+  font-weight: 600;
+  text-align: center;
+}
+
+.metric-value {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.metric-value em {
+  flex: 0 0 auto;
+  color: var(--green);
+  font-size: 10px;
+  font-style: normal;
+  font-weight: 700;
+}
+
+.metric-value em.down {
+  color: #b3573f;
+}
+
+.bars {
+  height: 190px;
+  margin: 34px 0;
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  border-bottom: 1px solid #cfdad3;
+}
+
+.bars span {
+  min-width: 5px;
+  flex: 1;
+  border-radius: 3px 3px 0 0;
+  background: var(--green);
+  opacity: 0.78;
+}
+
+.metric-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--line);
+}
+
+.metric-grid > div {
+  min-width: 0;
+  padding: 18px;
+  display: grid;
+  gap: 7px;
+  background: white;
+}
+
+.metric-grid svg {
+  color: var(--green);
+}
+
+.metric-grid span {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.metric-grid strong {
+  overflow: hidden;
+  font-size: 14px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pricing-section {
+  border-top: 1px solid var(--line);
+}
+
+.pricing-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+  margin-top: 54px;
+}
+
+.price-card {
+  position: relative;
+  min-width: 0;
+  padding: 32px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: white;
+}
+
+.price-card.featured {
+  border-color: var(--green);
+  box-shadow: 0 20px 50px rgba(22, 128, 61, 0.11);
+}
+
+.popular {
+  position: absolute;
+  top: -12px;
+  right: 20px;
+  padding: 6px 9px;
+  border-radius: 4px;
+  background: var(--green);
+  color: white;
+  font-size: 9px;
+  font-weight: 800;
+}
+
+.price-card h3 {
+  margin: 0 0 8px;
+  font-size: 21px;
+}
+
+.price-card > p {
+  min-height: 48px;
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.price {
+  height: 72px;
+  margin: 24px 0;
+  display: flex;
+  align-items: baseline;
+  /* Four- and five-digit figures are much wider than the old three-digit
+     ones, so let the qualifier drop to its own line rather than overflow. */
+  flex-wrap: wrap;
+}
+
+.price small {
+  align-self: flex-start;
+  margin-top: 11px;
+  font-size: 17px;
+  font-weight: 700;
+}
+
+.price strong {
+  font-size: clamp(36px, 4vw, 50px);
+}
+
+.price span {
+  margin-left: 7px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.price .custom-price {
+  align-self: center;
+  font-size: 36px;
+}
+
+.plan-button {
+  width: 100%;
+  border: 1px solid #cbd6cf;
+  background: white;
+  color: var(--ink);
+}
+
+.plan-button:hover {
+  border-color: var(--green);
+  color: var(--green);
+}
+
+.primary-button.full {
+  width: 100%;
+}
+
+.plan-features {
+  display: grid;
+  gap: 12px;
+  margin-top: 28px;
+  padding-top: 26px;
+  border-top: 1px solid var(--line);
+}
+
+.plan-features span {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  color: #4f6057;
+  font-size: 13px;
+}
+
+.plan-features svg {
+  flex: 0 0 auto;
+  color: var(--green);
+}
+
+.pricing-note {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin: 22px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  text-align: center;
+}
+
+.faq-section {
+  display: grid;
+  grid-template-columns: 0.75fr 1.25fr;
+  gap: 90px;
+  border-top: 1px solid var(--line);
+}
+
+.faq-item {
+  border-bottom: 1px solid var(--line);
+}
+
+.faq-question {
+  width: 100%;
+  min-height: 76px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 0;
+  background: transparent;
+  color: inherit;
+  font-weight: 700;
+  text-align: left;
+  cursor: pointer;
+}
+
+.faq-question svg {
+  flex: 0 0 auto;
+  color: var(--green);
+  transition: transform 320ms cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+
+.faq-item.open .faq-question svg {
+  transform: rotate(180deg);
+}
+
+/* 0fr -> 1fr animates the answer open without measuring its height,
+   which is what a max-height transition would otherwise require. */
+.faq-answer {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 320ms cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+
+.faq-item.open .faq-answer {
+  grid-template-rows: 1fr;
+}
+
+/* Delayed visibility keeps the collapsed answer out of the accessibility
+   tree, which overflow:hidden alone does not do. */
+.faq-answer > div {
+  overflow: hidden;
+  visibility: hidden;
+  transition: visibility 0s linear 320ms;
+}
+
+.faq-item.open .faq-answer > div {
+  visibility: visible;
+  transition-delay: 0s;
+}
+
+.faq-answer p {
+  max-width: 660px;
+  margin: -2px 0 24px;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.75;
+}
+
+/* Closing panel: green CTA card with the footer beneath it. */
+.closing {
+  width: min(1180px, calc(100% - 40px));
+  margin: 0 auto;
+  padding-bottom: 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 46px;
+}
+
+.final-cta {
+  width: 100%;
+  min-height: 300px;
+  margin: 0;
+  padding: 52px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 50px;
+  border-radius: 8px;
+  background: var(--green);
+  color: white;
+}
+
+.final-cta > div {
+  max-width: 730px;
+}
+
+.final-cta h2 {
+  max-width: 700px;
+}
+
+.final-cta p {
+  color: #d9f1e2;
+}
+
+.light-button {
+  flex: 0 0 auto;
+  background: white;
+  color: var(--green-dark);
+}
+
+.light-button:hover {
+  transform: translateY(-1px);
+}
+
+footer {
+  width: 100%;
+  margin: 0;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 42px 70px;
+}
+
+.footer-brand p {
+  max-width: 360px;
+  margin: 18px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.footer-links {
+  display: flex;
+  gap: 80px;
+}
+
+.footer-links > div {
+  display: grid;
+  align-content: start;
+  gap: 11px;
+  min-width: 100px;
+}
+
+.footer-links strong {
+  margin-bottom: 3px;
+  font-size: 12px;
+}
+
+.footer-links a {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.footer-links a:hover {
+  color: var(--green);
+}
+
+.footer-bottom {
+  grid-column: 1 / -1;
+  padding-top: 22px;
+  display: flex;
+  justify-content: space-between;
+  border-top: 1px solid var(--line);
+  color: #829087;
+  font-size: 11px;
+}
+
+/* ---- Section washes -------------------------------------------------
+   A barely-there green tint per section, anchored to a different corner
+   each time so consecutive panels feel distinct while all still reading
+   as white. Alpha stays at or below 0.06 on purpose. The hero and the
+   green closing CTA are left alone.
+   -------------------------------------------------------------------- */
+.product-section {
+  background-image: radial-gradient(85% 75% at 92% 8%, rgba(22, 128, 61, 0.055), transparent 58%);
+}
+
+.feature-section {
+  background-image: radial-gradient(88% 80% at 8% 100%, rgba(22, 128, 61, 0.05), transparent 60%);
+}
+
+.connectivity-band {
+  background-image: radial-gradient(70% 90% at 76% 50%, rgba(22, 128, 61, 0.06), transparent 62%);
+}
+
+.details-section {
+  background-image: radial-gradient(85% 78% at 96% 92%, rgba(22, 128, 61, 0.05), transparent 58%);
+}
+
+.pricing-section {
+  background-image: radial-gradient(100% 72% at 50% 0%, rgba(22, 128, 61, 0.055), transparent 62%);
+}
+
+.faq-section {
+  background-image: radial-gradient(80% 80% at 6% 18%, rgba(22, 128, 61, 0.05), transparent 60%);
+}
+
+.closing {
+  background-image: radial-gradient(80% 90% at 50% 100%, rgba(22, 128, 61, 0.045), transparent 62%);
+}
+
+@media (max-width: 900px) {
+  .desktop-nav,
+  .desktop-cta {
+    display: none;
+  }
+
+  .menu-button {
+    display: inline-flex;
+  }
+
+  .hero {
+    min-height: 760px;
+  }
+
+  .hero-image {
+    object-position: 58% center;
+  }
+
+  .preview-content {
+    grid-template-columns: 1fr 270px;
+  }
+
+  .preview-product:nth-child(n + 4) {
+    display: none;
+  }
+
+  .feature-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .connectivity-inner,
+  .details-section,
+  .faq-section {
+    grid-template-columns: 1fr;
+    gap: 56px;
+  }
+
+  .connectivity-inner {
+    padding: 90px 0;
+  }
+
+  .details-section {
+    gap: 50px;
+  }
+
+  .pricing-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .price-card {
+    max-width: 600px;
+    width: 100%;
+    margin: 0 auto;
+  }
+
+  .price-card > p {
+    min-height: auto;
+  }
+
+  .final-cta {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}
+
+@media (max-width: 640px) {
+  .site-header {
+    top: 10px;
+    padding: 0 12px;
+  }
+
+  .nav-shell {
+    height: 48px;
+    padding-left: 12px;
+  }
+
+  .brand-mark {
+    width: 30px;
+    height: 30px;
+  }
+
+  .mobile-menu {
+    width: calc(100% - 24px);
+  }
+
+  .hero {
+    min-height: 720px;
+  }
+
+  .hero-shade {
+    background: linear-gradient(180deg, rgba(255,255,255,0.97) 0%, rgba(255,255,255,0.82) 48%, rgba(255,255,255,0.18) 82%);
+  }
+
+  .hero-content {
+    width: calc(100% - 28px);
+    padding-top: 106px;
+  }
+
+  .hero h1 {
+    font-size: 58px;
+  }
+
+  .hero-content > p {
+    font-size: 18px;
+  }
+
+  .hero-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .hero-proof {
+    gap: 9px 14px;
+  }
+
+  .section,
+  .connectivity-inner,
+  .closing {
+    width: calc(100% - 28px);
+  }
+
+  .hero-capabilities {
+    grid-template-columns: 1fr;
+    gap: 11px;
+    margin-top: 26px;
+    padding-top: 18px;
+  }
+
+  .section {
+    padding: 84px 0;
+  }
+
+  .section-heading h2,
+  .connectivity-copy h2,
+  .detail-copy h2,
+  .faq-heading h2,
+  .final-cta h2 {
+    font-size: 34px;
+  }
+
+  .section-heading p,
+  .connectivity-copy > p,
+  .detail-copy > p,
+  .faq-heading > p,
+  .final-cta p {
+    font-size: 15px;
+  }
+
+  .product-preview {
+    height: 500px;
+    margin-top: 40px;
+  }
+
+  .preview-sidebar {
+    width: 54px;
+  }
+
+  .preview-sidebar .brand-mark {
+    width: 32px;
+    height: 32px;
+    margin-bottom: 18px;
+  }
+
+  .preview-nav {
+    width: 34px;
+    height: 34px;
+  }
+
+  .preview-topbar {
+    height: 72px;
+    padding: 0 16px;
+  }
+
+  .preview-content {
+    display: block;
+  }
+
+  .preview-products {
+    display: none;
+  }
+
+  .preview-cart {
+    height: 100%;
+    padding: 18px;
+    border-left: 0;
+  }
+
+  .preview-panel {
+    padding: 18px;
+    gap: 14px;
+  }
+
+  .stock-row {
+    grid-template-columns: 1fr 48px 74px;
+    padding: 11px 12px;
+  }
+
+  .receipt-row {
+    padding: 10px 12px;
+  }
+
+  .cart-row {
+    font-size: 12px;
+  }
+
+  .feature-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .feature-card {
+    min-height: 220px;
+    padding: 26px;
+  }
+
+  .sales-chart {
+    height: 160px;
+    margin: 22px 0;
+  }
+
+  .chart-axis {
+    gap: 5px;
+  }
+
+  .chart-axis span {
+    font-size: 9px;
+  }
+
+  .metric-main > strong {
+    font-size: 29px;
+  }
+
+  .metric-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .price-card {
+    padding: 26px;
+  }
+
+  .closing {
+    gap: 34px;
+  }
+
+  .final-cta {
+    min-height: 0;
+    padding: 38px 26px;
+  }
+
+  .light-button {
+    width: 100%;
+  }
+
+  footer {
+    grid-template-columns: 1fr;
+    gap: 34px;
+  }
+
+  .footer-links {
+    gap: 50px;
+  }
+
+  .footer-bottom {
+    gap: 8px;
+    flex-direction: column;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    transition: none !important;
+  }
+
+  /* Safety net: never leave revealed content stuck invisible. */
+  .reveal {
+    opacity: 1;
+    transform: none;
+  }
+
+  /* SMIL ignores CSS animation properties, so hide the travelling dots. */
+  .sync-diagram .flow {
+    display: none;
+  }
+
+  .hint-wheel i {
+    animation: none;
+    opacity: 1;
+  }
+}
+
+/* ============================================================
+   DESKTOP HORIZONTAL SCROLL MODE
+   Each top-level section becomes a full-viewport panel laid out
+   in a horizontal row; the whole page scrolls sideways.
+   Only active on desktop (>= 1024px); mobile keeps normal
+   vertical scrolling.
+
+   To revert completely:
+     1. Delete this whole block, and
+     2. set HORIZONTAL_SCROLL = false in app/page.tsx
+   ============================================================ */
+@media (min-width: 1024px) {
+  html:has(main.hscroll),
+  body:has(main.hscroll) {
+    height: 100%;
+    overflow: hidden; /* no vertical window scrollbar */
+  }
+
+  main.hscroll {
+    height: 100vh;
+    display: flex;
+    flex-direction: row;
+    flex-wrap: nowrap;
+    align-items: center;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scroll-behavior: smooth;
+    scroll-snap-type: x proximity;
+  }
+
+  /* Each direct child of <main> (except the fixed header) is one panel. */
+  main.hscroll > *:not(.site-header) {
+    flex: 0 0 100vw;
+    width: 100vw;
+    max-width: 100vw;
+    height: 100vh;
+    margin: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+    /* "safe" keeps content reachable if it ever does exceed the panel. */
+    align-content: safe center;
+    scroll-snap-align: start;
+    /* Vertical breathing room; extra top space clears the fixed header. */
+    padding-block: clamp(72px, 8.5vh, 104px) clamp(32px, 5vh, 72px);
+    /* Symmetric side padding that keeps content in a centered ~1240px column. */
+    padding-inline: max(48px, calc((100vw - 1240px) / 2));
+  }
+
+  /* Full-bleed panels: keep their background edge-to-edge, no side padding. */
+  main.hscroll .hero,
+  main.hscroll .connectivity-band {
+    height: 100vh;
+    max-height: none;
+    padding-inline: 0;
+    padding-block: 0;
+    overflow: hidden;
+  }
+
+  /* Hero is a left-aligned split (text left, photo right) with the
+     capability row along its foot. */
+  main.hscroll .hero {
+    flex-direction: column;
+    align-items: stretch;
+    justify-content: flex-end;
+    padding-inline: max(48px, calc((100vw - 1240px) / 2));
+    padding-block: 0 clamp(32px, 5vh, 60px);
+  }
+
+  main.hscroll .hero-image {
+    object-position: 82% center; /* keep the subject on the right side */
+  }
+
+  /* Left-to-right only. The capability panel is frosted, so the photo no
+     longer has to be washed out along the bottom to stay readable. */
+  main.hscroll .hero-shade {
+    background: linear-gradient(
+      90deg,
+      rgba(255, 255, 255, 0.88) 0%,
+      rgba(255, 255, 255, 0.68) 30%,
+      rgba(255, 255, 255, 0.22) 56%,
+      rgba(255, 255, 255, 0) 78%
+    );
+  }
+
+  main.hscroll .hero-content {
+    width: min(600px, 100%);
+    margin: 0;
+    padding-top: 0;
+    text-align: left;
+  }
+
+  main.hscroll .hero-content > p {
+    margin: 0;
+  }
+
+  main.hscroll .hero-actions,
+  main.hscroll .hero-proof {
+    justify-content: flex-start;
+  }
+
+  /* Only the sideways deck needs the tutorial. */
+  main.hscroll .scroll-hint {
+    display: flex;
+  }
+
+  /* Four across the foot of the hero, separated by space rather than
+     rules, so the opening panel carries them without a slide of its own. */
+  /* One row, so it becomes a full pill. Extra inline padding keeps the
+     outer items clear of the rounded ends. */
+  main.hscroll .hero-capabilities {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 16px clamp(14px, 1.6vw, 26px);
+    margin-top: clamp(20px, 3.2vh, 36px);
+    padding: clamp(12px, 1.8vh, 18px) clamp(22px, 2.4vw, 34px);
+    border-radius: 999px;
+  }
+
+  main.hscroll .hero-proof {
+    gap: 8px 16px;
+    margin-top: clamp(12px, 2vh, 20px);
+    font-size: 12px;
+  }
+
+  /* Panel 3: a narrow heading column so the mockup gets the room. */
+  main.hscroll .product-section {
+    width: 100%;
+    margin: 0;
+    display: grid;
+    grid-template-columns: minmax(210px, 0.46fr) 1.54fr;
+    align-items: center;
+    gap: clamp(28px, 3.4vw, 56px);
+  }
+
+  main.hscroll .product-section .section-heading.centered {
+    margin: 0;
+    text-align: left;
+  }
+
+  main.hscroll .product-section .section-heading h2 {
+    font-size: clamp(21px, min(2.4vw, 3.2vh), 32px);
+  }
+
+  main.hscroll .product-section .section-heading p {
+    font-size: clamp(12px, 1.4vh, 14px);
+  }
+
+  /* Cap by height using each device's aspect ratio (laptop 1628/935 =
+     1.741, phone 754/1555 = 0.4849) so neither mockup outgrows the panel,
+     leaving room for the switch beneath it. */
+  main.hscroll .device-stage {
+    margin: 0;
+  }
+
+  /* Leaves clear space under the floating switch. */
+  main.hscroll .device-frame {
+    width: min(100%, calc(62vh * 1.741));
+  }
+
+  main.hscroll .device-frame.phone {
+    width: min(100%, calc(62vh * 0.4849));
+  }
+
+  main.hscroll .device-switch {
+    margin-top: clamp(14px, 2.2vh, 22px);
+  }
+
+  /* Panel 4: heading left, the six feature cards fill the right. */
+  main.hscroll .feature-section {
+    width: 100%;
+    margin: 0;
+    display: grid;
+    grid-template-columns: minmax(280px, 0.72fr) 1.28fr;
+    align-items: center;
+    gap: clamp(40px, 5vw, 84px);
+    border-top: 0;
+  }
+
+  main.hscroll .feature-section .section-heading {
+    max-width: none;
+  }
+
+  main.hscroll .feature-grid {
+    margin: 0;
+  }
+
+  main.hscroll .feature-grid {
+    margin: 0;
+    gap: clamp(10px, 1.1vw, 16px);
+  }
+
+  /* Icon, title and copy centre as one stack in the middle of the card. */
+  main.hscroll .feature-card {
+    min-height: clamp(140px, 19vh, 200px);
+    padding: clamp(18px, 2.6vh, 28px) clamp(14px, 1.4vw, 22px);
+    justify-content: center;
+  }
+
+  main.hscroll .feature-icon {
+    width: clamp(46px, 6.4vh, 66px);
+    height: clamp(46px, 6.4vh, 66px);
+    margin-bottom: clamp(10px, 1.8vh, 18px);
+  }
+
+  main.hscroll .feature-card h3 {
+    margin-bottom: 5px;
+    font-size: 16px;
+  }
+
+  main.hscroll .feature-card p {
+    max-width: 26ch;
+    font-size: 13px;
+    line-height: 1.5;
+  }
+
+  /* Dark connectivity band: center its inner content vertically. */
+  main.hscroll .connectivity-band {
+    display: flex;
+    align-items: center;
+  }
+
+  /* Panel 5: copy left, the offline -> online flow runs left to right. */
+  main.hscroll .connectivity-inner {
+    width: 100%;
+    min-height: 0;
+    grid-template-columns: minmax(280px, 0.72fr) 1.28fr;
+    gap: clamp(40px, 5vw, 84px);
+    padding-inline: max(48px, calc((100vw - 1240px) / 2));
+  }
+
+  /* 520 / 470 = 1.106, so this caps the diagram by panel height. */
+  main.hscroll .sync-diagram {
+    max-width: min(100%, calc(52vh * 1.106));
+  }
+
+  /* ---- Fit to viewport ----------------------------------------
+     Type and spacing scale with viewport HEIGHT as well as width,
+     so every panel fits in 100vh without scrolling vertically.
+     ------------------------------------------------------------ */
+  main.hscroll .hero h1 {
+    font-size: clamp(40px, min(5.6vw, 8.4vh), 72px);
+  }
+
+  main.hscroll .hero-content > p {
+    font-size: clamp(15px, min(1.8vw, 2.3vh), 20px);
+  }
+
+  main.hscroll .hero-actions {
+    margin-top: clamp(18px, 3vh, 28px);
+  }
+
+  main.hscroll .hero-proof {
+    margin-top: clamp(14px, 2.4vh, 22px);
+  }
+
+  main.hscroll .section-heading h2,
+  main.hscroll .connectivity-copy h2,
+  main.hscroll .detail-copy h2,
+  main.hscroll .faq-heading h2,
+  main.hscroll .final-cta h2 {
+    margin: 8px 0 12px;
+    font-size: clamp(24px, min(3.1vw, 4.2vh), 40px);
+  }
+
+  main.hscroll .section-heading p,
+  main.hscroll .connectivity-copy > p,
+  main.hscroll .detail-copy > p,
+  main.hscroll .faq-heading > p,
+  main.hscroll .final-cta p {
+    font-size: clamp(13px, 1.5vh, 15px);
+    line-height: 1.65;
+  }
+
+  main.hscroll .connectivity-points {
+    gap: clamp(9px, 1.6vh, 15px);
+    margin-top: clamp(18px, 3vh, 30px);
+  }
+
+  main.hscroll .connectivity-points span {
+    font-size: 13px;
+  }
+
+  main.hscroll .section-label {
+    font-size: 11px;
+  }
+
+  /* Panel 6: copy left, the metrics panel fills the right. */
+  main.hscroll .details-section {
+    width: 100%;
+    margin: 0;
+    grid-template-columns: minmax(280px, 0.72fr) 1.28fr;
+    gap: clamp(40px, 5vw, 84px);
+  }
+
+  main.hscroll .text-link {
+    margin-top: clamp(16px, 2.6vh, 26px);
+    font-size: 14px;
+  }
+
+  main.hscroll .metrics-panel {
+    padding: 0;
+  }
+
+  main.hscroll .sales-chart {
+    height: clamp(96px, 19vh, 190px);
+    margin: clamp(14px, 2.4vh, 26px) 0;
+  }
+
+  main.hscroll .metric-main > strong {
+    font-size: clamp(24px, min(2.6vw, 3.4vh), 34px);
+  }
+
+  /* Panel 7: the same split as its neighbours -- heading and note in the
+     left column, the three plans as full-height columns on the right.
+     Stacking a full-width heading above three boxed cards is what made
+     this the tallest panel; side by side, the height comes down and each
+     plan gets room to breathe instead of being compressed. */
+  main.hscroll .pricing-section {
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    display: grid;
+    grid-template-columns: minmax(250px, 0.6fr) 1.4fr;
+    grid-template-rows: auto auto;
+    align-content: center;
+    gap: 0 clamp(36px, 4.4vw, 76px);
+    border-top: 0;
+  }
+
+  main.hscroll .pricing-section .section-heading.centered {
+    grid-column: 1;
+    grid-row: 1;
+    align-self: end;
+    max-width: none;
+    margin: 0;
+    text-align: left;
+  }
+
+  main.hscroll .pricing-section .section-heading h2 {
+    margin: 6px 0 10px;
+    font-size: clamp(22px, min(2.8vw, 3.8vh), 38px);
+  }
+
+  main.hscroll .pricing-section .section-heading p {
+    font-size: clamp(12px, 1.5vh, 15px);
+    line-height: 1.6;
+  }
+
+  main.hscroll .pricing-note {
+    grid-column: 1;
+    grid-row: 2;
+    align-self: start;
+    justify-content: flex-start;
+    margin-top: clamp(14px, 2.4vh, 26px);
+    font-size: 11px;
+    text-align: left;
+  }
+
+  main.hscroll .pricing-grid {
+    grid-column: 2;
+    grid-row: 1 / span 2;
+    height: 100%;
+    max-height: clamp(300px, 62vh, 560px);
+    margin: 0;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: clamp(10px, 1vw, 16px);
+  }
+
+  /* Soft panels instead of hairline-divided columns -- the same move as
+     the hero: let each plan be its own object, separated by space and a
+     little elevation rather than by grey rules. */
+  main.hscroll .price-card {
+    display: flex;
+    flex-direction: column;
+    padding: clamp(22px, 3.2vh, 34px) clamp(18px, 1.6vw, 26px);
+    border: 1px solid rgba(18, 35, 27, 0.08);
+    border-radius: 14px;
+    background: rgba(255, 255, 255, 0.72);
+    box-shadow: 0 10px 30px rgba(18, 35, 27, 0.05);
+    backdrop-filter: blur(8px);
+    transition: transform 220ms ease, box-shadow 220ms ease, border-color 220ms ease;
+  }
+
+  main.hscroll .price-card:hover {
+    transform: translateY(-3px);
+    border-color: rgba(22, 128, 61, 0.28);
+    box-shadow: 0 18px 40px rgba(18, 35, 27, 0.09);
+  }
+
+  main.hscroll .price-card.featured {
+    border-color: rgba(22, 128, 61, 0.38);
+    background-image: linear-gradient(
+      180deg,
+      rgba(22, 128, 61, 0.07),
+      rgba(22, 128, 61, 0) 58%
+    );
+    box-shadow: 0 20px 46px rgba(22, 128, 61, 0.14);
+  }
+
+  main.hscroll .popular {
+    top: clamp(12px, 1.8vh, 18px);
+    right: clamp(14px, 1.4vw, 20px);
+    left: auto;
+    padding: 5px 8px;
+    letter-spacing: 0.06em;
+  }
+
+  main.hscroll .price-card h3 {
+    margin: 0 0 5px;
+    font-size: 18px;
+  }
+
+  main.hscroll .price-card > p {
+    min-height: 0;
+    font-size: 12px;
+    line-height: 1.55;
+  }
+
+  /* auto bottom margin drops the button and feature list to the foot of
+     the column, so every plan lines up however long its copy runs. */
+  main.hscroll .price {
+    height: auto;
+    gap: 3px;
+    margin: clamp(10px, 1.8vh, 20px) 0 auto;
+  }
+
+  main.hscroll .price strong {
+    font-size: clamp(24px, min(2.4vw, 3.4vh), 36px);
+    letter-spacing: -0.02em;
+  }
+
+  /* Peso sign rides the baseline instead of floating above it. */
+  main.hscroll .price small {
+    align-self: baseline;
+    margin-top: 0;
+    color: var(--muted);
+    font-size: 15px;
+  }
+
+  /* Qualifier sits under the figure, so the number reads as the headline. */
+  main.hscroll .price span {
+    width: 100%;
+    margin: 3px 0 0;
+    color: var(--muted);
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  main.hscroll .price .custom-price {
+    font-size: clamp(20px, min(2vw, 2.8vh), 28px);
+  }
+
+  main.hscroll .plan-button,
+  main.hscroll .primary-button.full {
+    min-height: 38px;
+  }
+
+  main.hscroll .plan-features {
+    gap: clamp(6px, 1vh, 11px);
+    margin-top: clamp(12px, 2vh, 22px);
+    padding-top: clamp(11px, 1.8vh, 20px);
+  }
+
+  main.hscroll .plan-features span {
+    gap: 8px;
+    font-size: 12px;
+  }
+
+  main.hscroll .plan-features svg {
+    width: 13px;
+    height: 13px;
+  }
+
+  /* The recommended plan's button stays filled; the others are outlines. */
+  main.hscroll .plan-button {
+    border-color: #cbd6cf;
+    background: rgba(255, 255, 255, 0.7);
+  }
+
+  main.hscroll .plan-button:hover {
+    border-color: var(--green);
+    background: var(--white);
+  }
+
+  /* Panel 8: heading left, the question list fills the right. */
+  main.hscroll .faq-section {
+    width: 100%;
+    margin: 0;
+    grid-template-columns: minmax(280px, 0.72fr) 1.28fr;
+    gap: clamp(40px, 5vw, 84px);
+    border-top: 0;
+  }
+
+  main.hscroll .faq-question {
+    min-height: clamp(48px, 7vh, 68px);
+    font-size: 15px;
+  }
+
+  main.hscroll .faq-answer p {
+    max-width: none;
+    margin-bottom: clamp(12px, 2vh, 22px);
+    font-size: 13px;
+  }
+
+  /* Closing panel: CTA card left, footer right -- the same two-column
+     split the rest of the deck uses. Both columns stretch to one shared
+     height so the two sides square off. */
+  main.hscroll .closing {
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    padding-bottom: 0;
+    display: grid;
+    grid-template-columns: minmax(300px, 1.05fr) 0.95fr;
+    align-items: stretch;
+    align-content: center;
+    gap: clamp(36px, 4.4vw, 76px);
+  }
+
+  /* Narrower column, so the copy and button stack instead of sitting
+     side by side. */
+  main.hscroll .final-cta {
+    min-height: clamp(300px, 50vh, 470px);
+    padding: clamp(28px, 4.6vh, 52px);
+    flex-direction: column;
+    align-items: flex-start;
+    justify-content: center;
+    gap: clamp(18px, 2.8vh, 32px);
+  }
+
+  main.hscroll .final-cta > div,
+  main.hscroll .final-cta h2 {
+    max-width: none;
+  }
+
+  main.hscroll .light-button {
+    align-self: flex-start;
+    min-height: 46px;
+  }
+
+  /* Both halves are panels now, so the closing slide reads as two objects
+     rather than a card next to loose text on a rule. */
+  main.hscroll .final-cta {
+    border-radius: 14px;
+    box-shadow: 0 20px 46px rgba(22, 128, 61, 0.18);
+  }
+
+  main.hscroll footer {
+    grid-template-columns: 1fr;
+    align-content: space-between;
+    gap: clamp(18px, 2.6vh, 30px);
+    padding: clamp(24px, 3.4vh, 38px) clamp(22px, 2vw, 32px);
+    border: 1px solid rgba(18, 35, 27, 0.08);
+    border-radius: 14px;
+    background: rgba(255, 255, 255, 0.72);
+    box-shadow: 0 10px 30px rgba(18, 35, 27, 0.05);
+    backdrop-filter: blur(8px);
+  }
+
+  /* Space separates the copyright line; the hairline above it went the
+     way of the other rules. */
+  main.hscroll .footer-bottom {
+    padding-top: 0;
+    border-top: 0;
+  }
+
+  main.hscroll .footer-brand p {
+    max-width: 300px;
+  }
+
+  /* Section titles sit on a common bottom line, echoing the hero. */
+  main.hscroll .product-section .section-heading,
+  main.hscroll .feature-section .section-heading,
+  main.hscroll .connectivity-copy,
+  main.hscroll .detail-copy,
+  main.hscroll .faq-heading {
+    align-self: end;
+  }
+
+  /* Content slides in from the right, following the deck's direction. */
+  main.hscroll .reveal {
+    transform: translateX(32px);
+  }
+
+  main.hscroll .reveal.is-visible {
+    transform: none;
+  }
+}
