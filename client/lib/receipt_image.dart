@@ -78,7 +78,7 @@ class ReceiptImage extends StatelessWidget {
             zeroRatedSales: 0);
     final posPermitted = seller.posPermitStatus == 'permitted';
     final invoiceTitle = !posPermitted
-        ? 'POS SALES SLIP'
+        ? 'CHIRPY POS SALES SLIP'
         : taxSummary.mode == 'vat'
             ? 'VAT INVOICE'
             : taxSummary.mode == 'non_vat'

@@ -171,7 +171,7 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen> {
       );
 
   Future<void> _returnByReceipt() async {
-    final receipt = TextEditingController(text: 'TRX-');
+    final receipt = TextEditingController(text: 'CHP-');
     final sale = await showModalBottomSheet<Map<String, Object?>>(
       context: context,
       isScrollControlled: true,
@@ -204,7 +204,7 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen> {
                   textCapitalization: TextCapitalization.characters,
                   textInputAction: TextInputAction.search,
                   decoration: const InputDecoration(
-                      labelText: 'Receipt number', hintText: 'TRX-...'),
+                      labelText: 'Receipt number', hintText: 'CHP-...'),
                   onSubmitted: (_) => _verifyReturnReceipt(sheet, receipt.text),
                 ),
                 const SizedBox(height: 16),
@@ -223,16 +223,20 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen> {
 
   Future<void> _verifyReturnReceipt(BuildContext sheet, String value) async {
     final number = value.trim().toUpperCase();
-    if (!RegExp(r'^TRX-[A-Z0-9-]+$').hasMatch(number)) {
-      ScaffoldMessenger.of(sheet).showSnackBar(
-          const SnackBar(content: Text('Enter a valid TRX receipt number.')));
+    if (!RegExp(r'^(CHP|TRX)-[A-Z0-9-]+$').hasMatch(number)) {
+      ScaffoldMessenger.of(sheet).showSnackBar(const SnackBar(
+          content: Text('Enter a valid Chirpy POS receipt number.')));
       return;
     }
     var sale = await widget.database.saleByReceiptNumber(number);
     if (sale == null) {
+      final deploymentMode = await widget.database.setting('deployment_mode');
       final server = await widget.database.setting('server_url');
       final token = await widget.database.setting('token');
-      if (server != null && token != null && token.isNotEmpty) {
+      if (deploymentMode != 'standalone' &&
+          server != null &&
+          token != null &&
+          token.isNotEmpty) {
         try {
           final remote = await ApiClient(Uri.parse(server), token: token)
               .saleByReceipt(number);

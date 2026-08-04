@@ -1,6 +1,6 @@
-# TRX POS Website
+# Chirpy POS Website
 
-React, Next.js, and Tailwind marketing website for TRX POS.
+React, Next.js, and Tailwind marketing website for Chirpy POS.
 
 ## Run locally
 
@@ -30,12 +30,13 @@ node --test tests/rendered-html.test.mjs
 
 - Page content and plan details: `app/page.tsx`
 - Colors and layout: `app/globals.css`
-- Store photograph: `public/trx-pos-retail-hero.png`
-- Social sharing image: `public/trx-pos-social.png`
+- Store photograph: `public/chirpy-pos-retail-hero.png`
+- Social sharing image: `public/chirpy-pos-social.png`
+- Product logo and favicon: `public/chirpy-logo.png`
 - Manrope font files: `public/fonts/`
 - Browser title and social metadata: `app/layout.tsx`
 
-Replace the placeholder `sales@trxpos.example` and `support@trxpos.example`
+Replace the placeholder `sales@chirpypos.example` and `support@chirpypos.example`
 addresses before launch.
 
 ## Subscription gateway

@@ -2,18 +2,19 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "TRX POS | Sell clearly, online or offline",
+  title: "Chirpy POS | Sell clearly, online or offline",
   description:
     "A modern point of sale for checkout, inventory, reports, returns, credit, expenses, and connected desktop and mobile workflows.",
   icons: {
-    icon: "/favicon.svg",
-    shortcut: "/favicon.svg",
+    icon: "/chirpy-logo.png",
+    shortcut: "/chirpy-logo.png",
+    apple: "/chirpy-logo.png",
   },
   openGraph: {
-    title: "TRX POS | Modern retail, clearly connected",
+    title: "Chirpy POS | Modern retail, clearly connected",
     description:
       "Sell faster, know your stock, and keep moving online or offline.",
-    images: ["/trx-pos-social.png"],
+    images: ["/chirpy-pos-social.png"],
   },
 };
 

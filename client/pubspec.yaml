@@ -1,5 +1,5 @@
-name: pos_client
-description: Offline-first Flutter point-of-sale client for desktop and Android.
+name: chirpy_pos
+description: Chirpy POS, an offline-first point-of-sale client for desktop and Android.
 publish_to: none
 version: 0.1.0+1
 
@@ -38,11 +38,18 @@ flutter_launcher_icons:
   ios: false
   image_path: "assets/branding/app_icon.png"
   min_sdk_android: 21
-  adaptive_icon_background: "#16803d"
+  adaptive_icon_background: "#0BB8EA"
   adaptive_icon_foreground: "assets/branding/app_icon.png"
+  windows:
+    generate: true
+    image_path: "assets/branding/app_icon.png"
+    icon_size: 256
 
 flutter:
   uses-material-design: true
+  assets:
+    - assets/branding/app_icon.png
+    - assets/branding/login_mascot.png
   fonts:
     - family: Manrope
       fonts:

@@ -35,6 +35,13 @@ class _ManagementScreenState extends State<ManagementScreen> {
   }
 
   Future<_ManagementData> _load() async {
+    final mode = await widget.database.setting('deployment_mode');
+    if (mode == 'standalone') {
+      return _ManagementData(
+          users: await widget.database.localUsers(),
+          logs: const [],
+          localMode: true);
+    }
     final server = await widget.database.setting('server_url');
     final token = await widget.database.setting('token');
     if (server == null || token == null || token.isEmpty) {
@@ -101,34 +108,42 @@ class _ManagementScreenState extends State<ManagementScreen> {
               return Padding(
                   padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
                   child: Column(children: [
-                    if (data.offline) _offlineBanner(data.pendingSync),
+                    if (data.localMode)
+                      _localBanner()
+                    else if (data.offline)
+                      _offlineBanner(data.pendingSync),
                     Row(children: [
                       const Icon(LucideIcons.users, size: 19),
                       const SizedBox(width: 8),
-                      Text('Business controls',
+                      Text(
+                          data.localMode
+                              ? 'Local accounts'
+                              : 'Business controls',
                           style: Theme.of(context).textTheme.titleLarge),
                       const Spacer(),
                       Text('${data.users.length} staff',
                           style: Theme.of(context).textTheme.bodySmall)
                     ]),
                     const SizedBox(height: 14),
-                    SegmentedButton<String>(
-                        segments: const [
-                          ButtonSegment(
-                              value: 'staff',
-                              icon: Icon(LucideIcons.users),
-                              label: Text('Staff')),
-                          ButtonSegment(
-                              value: 'audit',
-                              icon: Icon(LucideIcons.history),
-                              label: Text('Audit'))
-                        ],
-                        selected: {
-                          _tab
-                        },
-                        onSelectionChanged: (value) =>
-                            setState(() => _tab = value.first)),
-                    const SizedBox(height: 16),
+                    if (!data.localMode) ...[
+                      SegmentedButton<String>(
+                          segments: const [
+                            ButtonSegment(
+                                value: 'staff',
+                                icon: Icon(LucideIcons.users),
+                                label: Text('Staff')),
+                            ButtonSegment(
+                                value: 'audit',
+                                icon: Icon(LucideIcons.history),
+                                label: Text('Audit'))
+                          ],
+                          selected: {
+                            _tab
+                          },
+                          onSelectionChanged: (value) =>
+                              setState(() => _tab = value.first)),
+                      const SizedBox(height: 16),
+                    ],
                     Expanded(
                         child: Card(
                             margin: EdgeInsets.zero,
@@ -140,6 +155,25 @@ class _ManagementScreenState extends State<ManagementScreen> {
                   ]));
             }),
       );
+
+  Widget _localBanner() => Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+          color: const Color(0xffeff8f1),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: const Color(0xffcce2d0))),
+      child: const Row(children: [
+        Icon(LucideIcons.smartphone, size: 18, color: Color(0xff16803d)),
+        SizedBox(width: 10),
+        Expanded(
+            child: Text(
+                'Standalone mode - these accounts exist only on this device.',
+                style: TextStyle(
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w600,
+                    color: Color(0xff146c34)))),
+      ]));
 
   Widget _offlineBanner(int pending) => Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -163,7 +197,7 @@ class _ManagementScreenState extends State<ManagementScreen> {
       ]));
 
   Widget _emptyState(IconData icon, String message) => Center(
-      child: Column(mainAxisSize: MainAxisSize.min, children: [
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
         Icon(icon, size: 34, color: const Color(0xff9aa5a0)),
         const SizedBox(height: 10),
         Text(message,
@@ -177,51 +211,51 @@ class _ManagementScreenState extends State<ManagementScreen> {
           'No staff to show yet.\nConnect to the server once to load your staff, or add one to queue it.');
     }
     return ListView.separated(
-      itemCount: users.length,
-      separatorBuilder: (_, __) => const Divider(height: 1),
-      itemBuilder: (context, index) {
-        final user = users[index];
-        final inactive = user['deactivated_at'] != null;
-        return ListTile(
-            leading: Icon(LucideIcons.users,
-                color: inactive
-                    ? const Color(0xff9aa5a0)
-                    : const Color(0xff16803d)),
-            title: Row(children: [
-              Flexible(
-                  child: Text(user['name'] as String,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                          fontWeight: FontWeight.w700,
-                          color: inactive ? const Color(0xff9aa5a0) : null))),
-              if (inactive) ...[
-                const SizedBox(width: 8),
-                Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                    decoration: BoxDecoration(
-                        color: const Color(0xfff1f0ee),
-                        borderRadius: BorderRadius.circular(4)),
-                    child: const Text('Inactive',
+        itemCount: users.length,
+        separatorBuilder: (_, __) => const Divider(height: 1),
+        itemBuilder: (context, index) {
+          final user = users[index];
+          final inactive = user['deactivated_at'] != null;
+          return ListTile(
+              leading: Icon(LucideIcons.users,
+                  color: inactive
+                      ? const Color(0xff9aa5a0)
+                      : const Color(0xff16803d)),
+              title: Row(children: [
+                Flexible(
+                    child: Text(user['name'] as String,
+                        overflow: TextOverflow.ellipsis,
                         style: TextStyle(
-                            fontSize: 11,
                             fontWeight: FontWeight.w700,
-                            color: Color(0xff6b7671)))),
-              ],
-            ]),
-            subtitle: Text(user['username'] != null
-                ? '@${user['username']}  |  ${user['email'] ?? ''}'
-                : (user['email']?.toString() ?? '')),
-            trailing: Row(mainAxisSize: MainAxisSize.min, children: [
-              Text(_title(user['role'] as String),
-                  style: const TextStyle(
-                      fontWeight: FontWeight.w700, color: Color(0xff146c34))),
-              const SizedBox(width: 8),
-              const Icon(LucideIcons.pencil,
-                  size: 16, color: Color(0xff90a49a)),
-            ]),
-            onTap: () => _userEditor(existing: user));
-      });
+                            color: inactive ? const Color(0xff9aa5a0) : null))),
+                if (inactive) ...[
+                  const SizedBox(width: 8),
+                  Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                          color: const Color(0xfff1f0ee),
+                          borderRadius: BorderRadius.circular(4)),
+                      child: const Text('Inactive',
+                          style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                              color: Color(0xff6b7671)))),
+                ],
+              ]),
+              subtitle: Text(user['username'] != null
+                  ? '@${user['username']}  |  ${user['email'] ?? ''}'
+                  : (user['email']?.toString() ?? '')),
+              trailing: Row(mainAxisSize: MainAxisSize.min, children: [
+                Text(_title(user['role'] as String),
+                    style: const TextStyle(
+                        fontWeight: FontWeight.w700, color: Color(0xff146c34))),
+                const SizedBox(width: 8),
+                const Icon(LucideIcons.pencil,
+                    size: 16, color: Color(0xff90a49a)),
+              ]),
+              onTap: () => _userEditor(existing: user));
+        });
   }
 
   Widget _auditList(List<Map<String, dynamic>> logs) {
@@ -229,24 +263,29 @@ class _ManagementScreenState extends State<ManagementScreen> {
       return _emptyState(LucideIcons.history, 'No audit records to show yet.');
     }
     return ListView.separated(
-      itemCount: logs.length,
-      separatorBuilder: (_, __) => const Divider(height: 1),
-      itemBuilder: (context, index) {
-        final log = logs[index];
-        return ListTile(
-            leading: const Icon(LucideIcons.history, color: Color(0xff16803d)),
-            title: Text(_title(log['action'] as String),
-                style: const TextStyle(fontWeight: FontWeight.w700)),
-            subtitle: Text(
-                '${log['user_name'] ?? 'System'}  |  ${(log['created_at'] as String).substring(0, 16)}'),
-            trailing: Text(_title(log['subject_type'] as String),
-                style: Theme.of(context).textTheme.bodySmall));
-      });
+        itemCount: logs.length,
+        separatorBuilder: (_, __) => const Divider(height: 1),
+        itemBuilder: (context, index) {
+          final log = logs[index];
+          return ListTile(
+              leading:
+                  const Icon(LucideIcons.history, color: Color(0xff16803d)),
+              title: Text(_title(log['action'] as String),
+                  style: const TextStyle(fontWeight: FontWeight.w700)),
+              subtitle: Text(
+                  '${log['user_name'] ?? 'System'}  |  ${(log['created_at'] as String).substring(0, 16)}'),
+              trailing: Text(_title(log['subject_type'] as String),
+                  style: Theme.of(context).textTheme.bodySmall));
+        });
   }
 
   Future<void> _userEditor({Map<String, dynamic>? existing}) async {
+    final localMode =
+        await widget.database.setting('deployment_mode') == 'standalone';
+    if (!mounted) return;
     final editing = existing != null;
-    final name = TextEditingController(text: existing?['name'] as String? ?? '');
+    final name =
+        TextEditingController(text: existing?['name'] as String? ?? '');
     final email =
         TextEditingController(text: existing?['email'] as String? ?? '');
     final username =
@@ -279,7 +318,8 @@ class _ManagementScreenState extends State<ManagementScreen> {
             child: Column(mainAxisSize: MainAxisSize.min, children: [
               Align(
                   alignment: Alignment.centerLeft,
-                  child: Text(editing ? 'Edit staff member' : 'Add staff member',
+                  child: Text(
+                      editing ? 'Edit staff member' : 'Add staff member',
                       style: Theme.of(sheet)
                           .textTheme
                           .titleLarge
@@ -294,10 +334,16 @@ class _ManagementScreenState extends State<ManagementScreen> {
               const SizedBox(height: 10),
               TextFormField(
                   controller: email,
-                  decoration: const InputDecoration(labelText: 'Email'),
-                  validator: (value) => value == null || !value.contains('@')
-                      ? 'Enter an email.'
-                      : null),
+                  decoration: InputDecoration(
+                      labelText: localMode ? 'Email (optional)' : 'Email'),
+                  validator: (value) {
+                    if (localMode && (value == null || value.trim().isEmpty)) {
+                      return null;
+                    }
+                    return value == null || !value.contains('@')
+                        ? 'Enter an email.'
+                        : null;
+                  }),
               const SizedBox(height: 10),
               TextFormField(
                   controller: username,
@@ -316,7 +362,9 @@ class _ManagementScreenState extends State<ManagementScreen> {
                           ? 'New password (leave blank to keep)'
                           : 'Temporary password'),
                   validator: (value) {
-                    if (editing && (value == null || value.isEmpty)) return null;
+                    if (editing && (value == null || value.isEmpty)) {
+                      return null;
+                    }
                     return value == null || value.length < 8
                         ? 'Use at least 8 characters.'
                         : null;
@@ -329,7 +377,9 @@ class _ManagementScreenState extends State<ManagementScreen> {
                       .map((value) => DropdownMenuItem(
                           value: value, child: Text(_roleLabel(value))))
                       .toList(),
-                  onChanged: (value) => role = value!),
+                  onChanged: localMode && existing?['role'] == 'super_admin'
+                      ? null
+                      : (value) => role = value!),
               const SizedBox(height: 18),
               SizedBox(
                   width: double.infinity,
@@ -337,13 +387,40 @@ class _ManagementScreenState extends State<ManagementScreen> {
                   child: FilledButton.icon(
                       onPressed: () async {
                         if (!form.currentState!.validate()) return;
+                        final uname = username.text.trim();
+                        final pwd = password.text;
+                        final displayName = name.text.trim();
+                        if (localMode) {
+                          try {
+                            if (editing) {
+                              await widget.database.updateLocalUser(
+                                  id: existing['id'].toString(),
+                                  name: displayName,
+                                  email: email.text.trim(),
+                                  username: uname,
+                                  password: pwd.isEmpty ? null : pwd,
+                                  role: role);
+                            } else {
+                              await widget.database.createLocalUser(
+                                  name: displayName,
+                                  email: email.text.trim(),
+                                  username: uname,
+                                  password: pwd,
+                                  role: role);
+                            }
+                            if (sheet.mounted) Navigator.pop(sheet, true);
+                          } catch (error) {
+                            if (sheet.mounted) {
+                              ScaffoldMessenger.of(sheet).showSnackBar(
+                                  SnackBar(content: Text(error.toString())));
+                            }
+                          }
+                          return;
+                        }
                         final server =
                             await widget.database.setting('server_url');
                         final token = await widget.database.setting('token');
                         if (server == null || token == null) return;
-                        final uname = username.text.trim();
-                        final pwd = password.text;
-                        final displayName = name.text.trim();
                         // Remember this account on this device so the new user
                         // can sign in even while the server is unreachable and
                         // before the account has synced. Skipped on an edit that
@@ -360,6 +437,7 @@ class _ManagementScreenState extends State<ManagementScreen> {
                               branchId: branchId,
                               token: token);
                         }
+
                         try {
                           final api =
                               ApiClient(Uri.parse(server), token: token);
@@ -369,8 +447,9 @@ class _ManagementScreenState extends State<ManagementScreen> {
                                 name: name.text.trim(),
                                 email: email.text.trim(),
                                 username: username.text.trim(),
-                                password:
-                                    password.text.isEmpty ? null : password.text,
+                                password: password.text.isEmpty
+                                    ? null
+                                    : password.text,
                                 role: role);
                           } else {
                             await api.createManagementUser(
@@ -395,8 +474,8 @@ class _ManagementScreenState extends State<ManagementScreen> {
                             // A real error, not a connectivity failure - show
                             // it instead of silently queuing.
                             if (sheet.mounted) {
-                              ScaffoldMessenger.of(sheet).showSnackBar(SnackBar(
-                                  content: Text(error.toString())));
+                              ScaffoldMessenger.of(sheet).showSnackBar(
+                                  SnackBar(content: Text(error.toString())));
                             }
                             return;
                           }
@@ -424,8 +503,8 @@ class _ManagementScreenState extends State<ManagementScreen> {
                             if (sheet.mounted) Navigator.pop(sheet, true);
                           } catch (error) {
                             if (sheet.mounted) {
-                              ScaffoldMessenger.of(sheet).showSnackBar(SnackBar(
-                                  content: Text(error.toString())));
+                              ScaffoldMessenger.of(sheet).showSnackBar(
+                                  SnackBar(content: Text(error.toString())));
                             }
                           }
                         }
@@ -493,6 +572,21 @@ class _ManagementScreenState extends State<ManagementScreen> {
       );
       if (confirm != true) return;
     }
+    final localMode =
+        await widget.database.setting('deployment_mode') == 'standalone';
+    if (localMode) {
+      try {
+        await widget.database
+            .setLocalUserActive(existing['id'].toString(), active);
+        if (sheet.mounted) Navigator.pop(sheet, true);
+      } catch (error) {
+        if (sheet.mounted) {
+          ScaffoldMessenger.of(sheet)
+              .showSnackBar(SnackBar(content: Text(error.toString())));
+        }
+      }
+      return;
+    }
     final server = await widget.database.setting('server_url');
     final token = await widget.database.setting('token');
     if (server == null || token == null) return;
@@ -535,11 +629,13 @@ class _ManagementData {
       {required this.users,
       required this.logs,
       this.offline = false,
-      this.pendingSync = 0});
+      this.pendingSync = 0,
+      this.localMode = false});
   final List<Map<String, dynamic>> users;
   final List<Map<String, dynamic>> logs;
   final bool offline;
   final int pendingSync;
+  final bool localMode;
 }
 
 String _roleLabel(String value) => value

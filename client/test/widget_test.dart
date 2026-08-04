@@ -2,10 +2,11 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:pos_client/data/local/local_database.dart';
-import 'package:pos_client/receipt_image.dart';
-import 'package:pos_client/receipt_profile.dart';
-import 'package:pos_client/sale_tax.dart';
+import 'package:chirpy_pos/data/local/local_database.dart';
+import 'package:chirpy_pos/login_screen.dart';
+import 'package:chirpy_pos/receipt_image.dart';
+import 'package:chirpy_pos/receipt_profile.dart';
+import 'package:chirpy_pos/sale_tax.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 void main() {
@@ -72,6 +73,13 @@ void main() {
     await rawDatabase.execute('''CREATE TABLE app_settings (
       key TEXT PRIMARY KEY, value TEXT NOT NULL
     )''');
+    await rawDatabase.execute('''CREATE TABLE local_users (
+      id TEXT PRIMARY KEY, name TEXT NOT NULL, email TEXT,
+      username TEXT NOT NULL COLLATE NOCASE UNIQUE,
+      password_salt TEXT NOT NULL, password_hash TEXT NOT NULL,
+      role TEXT NOT NULL, deactivated_at TEXT,
+      created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+    )''');
     await rawDatabase.execute('''CREATE TABLE register_shifts (
       id TEXT PRIMARY KEY, opening_cash REAL NOT NULL, status TEXT NOT NULL,
       opened_at TEXT NOT NULL, closed_at TEXT, expected_cash REAL,
@@ -102,6 +110,39 @@ void main() {
   });
 
   tearDown(() => rawDatabase.close());
+
+  test('standalone accounts can sign in and be managed locally', () async {
+    final user = await database.createLocalUser(
+        name: 'Local Cashier',
+        email: '',
+        username: 'cashier',
+        password: 'password123',
+        role: 'cashier');
+
+    expect(await database.verifyLocalCredential('cashier', 'wrong'), isNull);
+    expect(
+        (await database.verifyLocalCredential(
+            'CASHIER', 'password123'))?['user_role'],
+        'cashier');
+
+    await database.updateLocalUser(
+        id: user['id'] as String,
+        name: 'Local Manager',
+        email: 'manager@example.com',
+        username: 'manager',
+        password: 'newpassword123',
+        role: 'store_manager');
+    expect(
+        await database.verifyLocalCredential('cashier', 'password123'), isNull);
+    expect(
+        (await database.verifyLocalCredential(
+            'manager', 'newpassword123'))?['user_role'],
+        'store_manager');
+
+    await database.setLocalUserActive(user['id'] as String, false);
+    expect(await database.verifyLocalCredential('manager', 'newpassword123'),
+        isNull);
+  });
 
   test('held sale preserves cart and discount until it is retrieved', () async {
     await database.holdSale(
@@ -513,7 +554,7 @@ void main() {
       ),
     ));
 
-    expect(find.text('POS SALES SLIP'), findsOneWidget);
+    expect(find.text('CHIRPY POS SALES SLIP'), findsOneWidget);
     expect(find.text('NOT VALID AS BIR INVOICE'), findsOneWidget);
     expect(find.text('TRX-002'), findsOneWidget);
     expect(find.text('Maria Santos'), findsOneWidget);
@@ -608,5 +649,30 @@ void main() {
     final sale = await database.saleByReceiptNumber('TRX-REMOTE-1');
     expect(sale?['receipt_name'], 'Remote Customer');
     expect((await database.saleReceipt('remote-sale'))['items'], hasLength(1));
+  });
+
+  testWidgets('login layout fits a phone and switches connection modes',
+      (tester) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(MaterialApp(
+      home: LoginScreen(database: database, onSignedIn: () {}),
+    ));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Hello, seller!'), findsOneWidget);
+    expect(find.text('Start selling locally'), findsOneWidget);
+    expect(find.byType(Image), findsOneWidget);
+    expect(tester.takeException(), isNull);
+
+    await tester.tap(find.text('Server'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Connect and sign in'), findsOneWidget);
+    expect(find.text('Server connection'), findsOneWidget);
+    expect(tester.takeException(), isNull);
   });
 }

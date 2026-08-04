@@ -34,7 +34,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   final server = TextEditingController(text: 'http://127.0.0.1:8000');
   final email = TextEditingController();
   final password = TextEditingController();
-  final deviceName = TextEditingController(text: 'POS terminal');
+  final deviceName = TextEditingController(text: 'Chirpy POS terminal');
   final storeName = TextEditingController();
   final registeredName = TextEditingController();
   final registeredAddress = TextEditingController();
@@ -49,6 +49,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool loading = false;
   String? signedInAs;
   String? lastSyncedAt;
+  String deploymentMode = 'hosted';
+
+  bool get isStandalone => deploymentMode == 'standalone';
 
   @override
   void initState() {
@@ -58,6 +61,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Future<void> _load() async {
     await materializeSyncedLogo(widget.database);
+    deploymentMode =
+        await widget.database.setting('deployment_mode') ?? 'hosted';
     server.text = await widget.database.setting('server_url') ?? server.text;
     deviceName.text =
         await widget.database.setting('device_name') ?? deviceName.text;
@@ -251,29 +256,35 @@ class _SettingsScreenState extends State<SettingsScreen> {
             const SizedBox(height: 22),
             const _SoftDivider(),
             const SizedBox(height: 22),
-            _SectionHeader(
-                icon: LucideIcons.settings, title: 'Device connection'),
-            const SizedBox(height: 14),
-            TextField(
-                controller: server,
-                keyboardType: TextInputType.url,
-                decoration: const InputDecoration(
-                    labelText: 'Server address',
-                    hintText: 'http://192.168.1.10:8000',
-                    border: OutlineInputBorder())),
-            const SizedBox(height: 10),
-            TextField(
-                controller: deviceName,
-                decoration: const InputDecoration(
-                    labelText: 'Device name', border: OutlineInputBorder())),
-            const SizedBox(height: 22),
-            const _SoftDivider(),
-            const SizedBox(height: 22),
+            if (!isStandalone) ...[
+              _SectionHeader(
+                  icon: LucideIcons.settings, title: 'Device connection'),
+              const SizedBox(height: 14),
+              TextField(
+                  controller: server,
+                  keyboardType: TextInputType.url,
+                  decoration: const InputDecoration(
+                      labelText: 'Server address',
+                      hintText: 'http://192.168.1.10:8000',
+                      border: OutlineInputBorder())),
+              const SizedBox(height: 10),
+              TextField(
+                  controller: deviceName,
+                  decoration: const InputDecoration(
+                      labelText: 'Device name', border: OutlineInputBorder())),
+              const SizedBox(height: 22),
+              const _SoftDivider(),
+              const SizedBox(height: 22),
+            ],
             _SectionHeader(
                 icon: signedInAs == null
                     ? LucideIcons.logIn
                     : LucideIcons.circleCheck,
-                title: signedInAs == null ? 'Sign in' : 'Connected account'),
+                title: signedInAs == null
+                    ? 'Sign in'
+                    : isStandalone
+                        ? 'Local account'
+                        : 'Connected account'),
             const SizedBox(height: 14),
             if (signedInAs == null) ...[
               TextField(
@@ -317,7 +328,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                        const Text('Signed in',
+                        Text(isStandalone ? 'Signed in locally' : 'Signed in',
                             style: TextStyle(fontWeight: FontWeight.w800)),
                         const SizedBox(height: 2),
                         Text(signedInAs!,
@@ -325,21 +336,23 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       ])),
                 ]),
               ),
-              const SizedBox(height: 14),
-              SizedBox(
-                height: 48,
-                child: FilledButton.icon(
-                  onPressed: loading ? null : _sync,
-                  icon: loading
-                      ? const SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(
-                              strokeWidth: 2, color: Colors.white))
-                      : const Icon(LucideIcons.refreshCw, size: 18),
-                  label: Text(loading ? 'Synchronizing...' : 'Sync now'),
+              if (!isStandalone) ...[
+                const SizedBox(height: 14),
+                SizedBox(
+                  height: 48,
+                  child: FilledButton.icon(
+                    onPressed: loading ? null : _sync,
+                    icon: loading
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(
+                                strokeWidth: 2, color: Colors.white))
+                        : const Icon(LucideIcons.refreshCw, size: 18),
+                    label: Text(loading ? 'Synchronizing...' : 'Sync now'),
+                  ),
                 ),
-              ),
+              ],
               const SizedBox(height: 10),
               SizedBox(
                   height: 44,
@@ -351,7 +364,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                   builder: (_) => ManagementScreen(
                                       database: widget.database))),
                       icon: const Icon(LucideIcons.users, size: 18),
-                      label: const Text('Manage staff and audit trail'))),
+                      label: Text(isStandalone
+                          ? 'Manage local accounts'
+                          : 'Manage staff and audit trail'))),
               const SizedBox(height: 10),
               SizedBox(
                   height: 44,
@@ -360,19 +375,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       icon: const Icon(LucideIcons.logOut, size: 18),
                       label: const Text('Sign out from this device'))),
             ],
-            const SizedBox(height: 22),
-            const _SoftDivider(),
-            const SizedBox(height: 22),
-            const _SectionHeader(
-                icon: LucideIcons.refreshCw, title: 'Offline sync'),
-            const SizedBox(height: 14),
-            FutureBuilder<_SyncOverview>(
-              future: _syncOverview(),
-              builder: (context, snapshot) => _SyncStatusPanel(
-                  overview: snapshot.data,
-                  lastSyncedAt: lastSyncedAt,
-                  onRetry: signedInAs == null || loading ? null : _sync),
-            ),
+            if (!isStandalone) ...[
+              const SizedBox(height: 22),
+              const _SoftDivider(),
+              const SizedBox(height: 22),
+              const _SectionHeader(
+                  icon: LucideIcons.refreshCw, title: 'Offline sync'),
+              const SizedBox(height: 14),
+              FutureBuilder<_SyncOverview>(
+                future: _syncOverview(),
+                builder: (context, snapshot) => _SyncStatusPanel(
+                    overview: snapshot.data,
+                    lastSyncedAt: lastSyncedAt,
+                    onRetry: signedInAs == null || loading ? null : _sync),
+              ),
+            ],
           ],
         ),
         floatingActionButton: ModuleFab(
@@ -472,11 +489,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
       await ApiClient(baseUrl, token: token).registerDevice(
           id: deviceId,
           name: deviceName.text.trim().isEmpty
-              ? 'POS terminal'
+              ? 'Chirpy POS terminal'
               : deviceName.text.trim(),
           mode: 'hosted',
           branchId: user['branch_id'] as String);
       await widget.database.saveSetting('server_url', baseUrl.toString());
+      await widget.database.saveSetting('deployment_mode', 'hosted');
       await widget.database.saveSetting('token', token);
       await widget.database.saveSetting('device_id', deviceId);
       await widget.database
@@ -486,6 +504,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           .saveSetting('user_role', user['role'] as String? ?? '');
       await widget.database.saveSetting('device_name', deviceName.text.trim());
       signedInAs = user['name'] as String;
+      deploymentMode = 'hosted';
       await _sync();
     } on FormatException {
       _show('Enter a full server address, such as http://127.0.0.1:8000.');
@@ -499,6 +518,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _sync() async {
+    if (await widget.database.setting('deployment_mode') == 'standalone') {
+      return;
+    }
     final serverUrl = await widget.database.setting('server_url');
     final token = await widget.database.setting('token');
     final deviceId = await widget.database.setting('device_id');

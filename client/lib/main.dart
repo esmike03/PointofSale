@@ -34,6 +34,7 @@ class PosApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => MaterialApp(
+        title: 'Chirpy POS',
         debugShowCheckedModeBanner: false,
         // Scale all text down on narrower (mobile) screens so it isn't too
         // large, while respecting the device's accessibility text size.
@@ -496,7 +497,7 @@ class _DesktopSidebar extends StatelessWidget {
                     if (!compact) ...[
                       const Padding(
                           padding: EdgeInsets.only(left: 18),
-                          child: Text('POS',
+                          child: Text('Chirpy POS',
                               style: TextStyle(
                                   fontSize: 18, fontWeight: FontWeight.w700))),
                       const Spacer(),
@@ -2102,7 +2103,7 @@ class _PosScreenState extends State<PosScreen> {
         [amount, receiptName, creditCustomer, creditContact, creditNote]);
     if (complete == null || completedPayments == null) return;
     try {
-      final receiptNumber = 'TRX-${DateTime.now().millisecondsSinceEpoch}';
+      final receiptNumber = 'CHP-${DateTime.now().millisecondsSinceEpoch}';
       final receiptItems = List<Map<String, Object?>>.from(cart);
       final discount = _saleDiscount;
       final discountReason = _saleDiscountReason;

@@ -1,6 +1,6 @@
-# Point of Sale
+# Chirpy POS
 
-Offline-first POS architecture for Windows and Android. Every sale is committed to local SQLite first; connected devices synchronize through the Laravel API. A client never connects to MySQL directly.
+Chirpy POS is an offline-first point-of-sale system for Windows and Android. Every sale is committed to local SQLite first; connected devices synchronize through the Laravel API. A client never connects to MySQL directly.
 
 ## Included foundation
 
@@ -39,10 +39,10 @@ The API health check is `GET /api/health`. Public registration is off by default
 
 The existing `server/.env` uses SQLite solely for local tests. For a local shared server, configure MySQL values in `server/.env`, run `php artisan migrate`, then run `php artisan serve --host=0.0.0.0 --port=8000` from `server/`.
 
-Flutter is not installed in this workspace. After installing it, run the following inside `client/`:
+After installing Flutter, generate any missing platform wrappers and run the client from `client/`:
 
 ```sh
-flutter create .
+flutter create --org com.chirpy --project-name chirpy_pos .
 flutter pub get
 flutter run -d windows
 ```
