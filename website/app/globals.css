@@ -149,8 +149,15 @@ button {
   justify-content: center;
   flex: 0 0 auto;
   border-radius: 6px;
-  background: var(--green);
-  color: white;
+  overflow: hidden;
+  background: #0bb8ea;
+}
+
+.brand-mark-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  image-rendering: pixelated;
 }
 
 .desktop-nav {
@@ -1466,19 +1473,23 @@ button {
   font-size: 13px;
 }
 
-/* Scroll reveal. JS adds .reveal only to elements that start off-screen,
-   then .is-visible when they scroll in. Elements already on screen are
-   never touched, so first paint never flashes. */
+/* Scroll reveal. JS adds .reveal to every animated element, plus
+   .is-visible right away to anything already on screen, so first paint
+   never flashes. The class is then toggled on each pass, so content
+   blurs and fades back out when it leaves and re-focuses on return. */
 .reveal {
   opacity: 0;
   transform: translateY(18px);
+  filter: blur(10px);
   transition: opacity 700ms cubic-bezier(0.22, 0.61, 0.36, 1),
-    transform 700ms cubic-bezier(0.22, 0.61, 0.36, 1);
+    transform 700ms cubic-bezier(0.22, 0.61, 0.36, 1),
+    filter 700ms cubic-bezier(0.22, 0.61, 0.36, 1);
 }
 
 .reveal.is-visible {
   opacity: 1;
   transform: none;
+  filter: blur(0);
 }
 
 .feature-section {
@@ -1625,6 +1636,7 @@ button {
 .sync-diagram .orbit {
   stroke: rgba(22, 128, 61, 0.26);
   stroke-width: 1.5;
+  transition: stroke 420ms ease;
 }
 
 /* Mask channels. These need CSS fills because the fill:none on
@@ -1660,6 +1672,149 @@ button {
   fill: var(--green);
   font-size: 12px;
   font-weight: 600;
+  transition: fill 420ms ease;
+}
+
+/* ---- Connectivity phases -------------------------------------------
+   The diagram carries .is-online / .is-offline / .is-syncing, and every
+   part below reacts to that one class. Transitions are on the parts, not
+   on swapped-in markup, so the outage and the recovery read as one
+   continuous system rather than a set of frames cutting between states.
+   Amber is reserved for the offline state; it is the only place on the
+   page that is not green, which is the point. */
+.sync-diagram.is-offline .orbit {
+  stroke: rgba(168, 106, 18, 0.34);
+  stroke-dasharray: 5 9;
+}
+
+/* Reconnected: the ring itself becomes the transfer, streaming toward
+   the mobile while the queue drains. */
+.sync-diagram.is-syncing .orbit {
+  stroke: rgba(22, 128, 61, 0.5);
+  stroke-dasharray: 3 10;
+  animation: sync-stream 620ms linear infinite;
+}
+
+@keyframes sync-stream {
+  to {
+    stroke-dashoffset: -13;
+  }
+}
+
+/* The travelling dots are frozen by the SVG clock when the link drops
+   (see SyncDiagram); fading them keeps that from looking like a stall. */
+.sync-diagram .flow {
+  transition: opacity 380ms ease;
+}
+
+.sync-diagram.is-offline .flow {
+  opacity: 0;
+}
+
+.sync-diagram .wifi {
+  stroke: var(--green);
+  stroke-width: 3;
+  stroke-linecap: round;
+  transition: stroke 420ms ease, opacity 420ms ease;
+}
+
+.sync-diagram .wifi-dot {
+  fill: var(--green);
+  stroke: none;
+  transition: fill 420ms ease;
+}
+
+.sync-diagram.is-offline .wifi,
+.sync-diagram.is-offline .wifi-dot {
+  stroke: rgba(168, 106, 18, 0.75);
+  fill: rgba(168, 106, 18, 0.75);
+  opacity: 0.65;
+}
+
+/* Signal returning: the arcs light up from the inside out. */
+.sync-diagram.is-syncing .arc-near {
+  animation: wifi-ping 1.1s ease-in-out infinite;
+}
+
+.sync-diagram.is-syncing .arc-mid {
+  animation: wifi-ping 1.1s ease-in-out 0.13s infinite;
+}
+
+.sync-diagram.is-syncing .arc-far {
+  animation: wifi-ping 1.1s ease-in-out 0.26s infinite;
+}
+
+@keyframes wifi-ping {
+  0%,
+  100% {
+    opacity: 0.35;
+  }
+  45% {
+    opacity: 1;
+  }
+}
+
+/* Drawn on rather than switched on: dasharray equals the slash's own
+   length (48/48 diagonal ~= 68), so the offset animates it into place. */
+.sync-diagram .wifi-slash {
+  stroke: #a86a12;
+  stroke-width: 3;
+  stroke-linecap: round;
+  stroke-dasharray: 68;
+  stroke-dashoffset: 68;
+  transition: stroke-dashoffset 340ms cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+
+.sync-diagram.is-offline .wifi-slash {
+  stroke-dashoffset: 0;
+}
+
+.sync-diagram .status-title {
+  fill: var(--ink);
+  font-size: 15px;
+  font-weight: 700;
+  stroke: none;
+  transition: fill 420ms ease;
+}
+
+.sync-diagram .status-note {
+  fill: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+  stroke: none;
+}
+
+.sync-diagram.is-offline .status-title {
+  fill: #a86a12;
+}
+
+.sync-diagram.is-syncing .status-title {
+  fill: var(--green);
+}
+
+.sync-diagram.is-offline .caption.sub {
+  fill: #a86a12;
+}
+
+/* Neither device dims during an outage. Both keep taking sales, so the
+   only thing that changes state is the link between them -- if a device
+   ever faded here it would read as "this one stopped working", which is
+   the opposite of the claim. */
+
+/* Held sales, stacking under each device through the outage and clearing
+   one at a time on the way back up. */
+.sync-diagram .queue-chip {
+  fill: rgba(18, 35, 27, 0.07);
+  stroke: none;
+  transition: fill 320ms ease;
+}
+
+.sync-diagram .queue-chip.is-held {
+  fill: rgba(168, 106, 18, 0.75);
+}
+
+.sync-diagram.is-syncing .queue-chip.is-held {
+  fill: var(--green);
 }
 
 .details-section {
@@ -2539,11 +2694,24 @@ footer {
   .reveal {
     opacity: 1;
     transform: none;
+    filter: none;
   }
 
   /* SMIL ignores CSS animation properties, so hide the travelling dots. */
   .sync-diagram .flow {
     display: none;
+  }
+
+  /* The phase script never starts under reduced motion, so the diagram
+     holds its connected state. Belt and braces in case a phase class is
+     ever set some other way. */
+  .sync-diagram .orbit,
+  .sync-diagram .wifi {
+    animation: none;
+  }
+
+  .sync-diagram .wifi-slash {
+    stroke-dashoffset: 68;
   }
 
   .hint-wheel i {

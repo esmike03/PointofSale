@@ -20,7 +20,7 @@ class LocalDatabase {
     }
     final path = join(await getDatabasesPath(), 'pos.sqlite');
     final database =
-        await openDatabase(path, version: 13, onCreate: (db, _) async {
+        await openDatabase(path, version: 14, onCreate: (db, _) async {
       await db.execute('''CREATE TABLE products (
         id TEXT PRIMARY KEY, sku TEXT, barcode TEXT, name TEXT NOT NULL,
         selling_price REAL NOT NULL, cost_price REAL NOT NULL DEFAULT 0,
@@ -66,6 +66,7 @@ class LocalDatabase {
       await _createFinanceTables(db);
       await _createCredentialTable(db);
       await _createStaffTable(db);
+      await _createLocalUsersTable(db);
     }, onUpgrade: (db, oldVersion, _) async {
       if (oldVersion < 2) {
         await db.execute(
@@ -131,7 +132,11 @@ class LocalDatabase {
         // as its own step to reach every install.
         await _createStaffTable(db);
       }
+      if (oldVersion < 14) {
+        await _createLocalUsersTable(db);
+      }
     });
+    await _ensureDefaultLocalAdmin(database);
     return LocalDatabase(database);
   }
 
@@ -154,6 +159,39 @@ class LocalDatabase {
       id TEXT PRIMARY KEY, name TEXT NOT NULL, email TEXT, username TEXT,
       role TEXT NOT NULL, deactivated_at TEXT, updated_at TEXT NOT NULL
     )''');
+  }
+
+  // Accounts used only by this installation. These are intentionally kept
+  // separate from the server staff mirror, which is replaced during a sync.
+  static Future<void> _createLocalUsersTable(DatabaseExecutor db) async {
+    await db.execute('''CREATE TABLE IF NOT EXISTS local_users (
+      id TEXT PRIMARY KEY, name TEXT NOT NULL, email TEXT,
+      username TEXT NOT NULL COLLATE NOCASE UNIQUE,
+      password_salt TEXT NOT NULL, password_hash TEXT NOT NULL,
+      role TEXT NOT NULL, deactivated_at TEXT,
+      created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+    )''');
+  }
+
+  static Future<void> _ensureDefaultLocalAdmin(DatabaseExecutor db) async {
+    final result =
+        await db.rawQuery('SELECT COUNT(*) AS total FROM local_users');
+    final count = (result.single['total'] as num).toInt();
+    if (count > 0) return;
+    final now = DateTime.now().toUtc().toIso8601String();
+    final salt = _newPasswordSalt();
+    await db.insert('local_users', {
+      'id': const Uuid().v4(),
+      'name': 'Administrator',
+      'email': null,
+      'username': 'admin',
+      'password_salt': salt,
+      'password_hash': _hashPassword('admin1234', salt),
+      'role': 'super_admin',
+      'deactivated_at': null,
+      'created_at': now,
+      'updated_at': now,
+    });
   }
 
   static Future<void> _createRegisterTables(DatabaseExecutor db) async {
@@ -1048,8 +1086,8 @@ class LocalDatabase {
           'tax_category': (item['taxCategory'] as String?) ?? 'vatable',
           'updated_at': now,
         };
-        await txn.insert('products',
-            {...product, 'quantity': 0, 'allow_negative_stock': 0});
+        await txn.insert(
+            'products', {...product, 'quantity': 0, 'allow_negative_stock': 0});
         await txn.insert('sync_queue', {
           'operation_id': uuid.v4(),
           'type': 'product.create',
@@ -1878,6 +1916,11 @@ class LocalDatabase {
   static String _hashPassword(String password, String salt) =>
       sha256.convert(utf8.encode('$salt:$password')).toString();
 
+  static String _newPasswordSalt() {
+    final rng = Random.secure();
+    return base64Url.encode(List<int>.generate(16, (_) => rng.nextInt(256)));
+  }
+
   /// Remembers a user's credentials after a successful online sign-in so they
   /// can be verified locally when the server is later unreachable. Only a
   /// salted hash of the password is stored, never the password itself.
@@ -1889,9 +1932,7 @@ class LocalDatabase {
     required String branchId,
     required String token,
   }) async {
-    final rng = Random.secure();
-    final saltBytes = List<int>.generate(16, (_) => rng.nextInt(256));
-    final salt = base64Url.encode(saltBytes);
+    final salt = _newPasswordSalt();
     await _database.insert(
       'cached_credentials',
       {
@@ -1915,9 +1956,7 @@ class LocalDatabase {
   Future<Map<String, String>?> verifyCachedCredential(
       String username, String password) async {
     final rows = await _database.query('cached_credentials',
-        where: 'username = ?',
-        whereArgs: [username.toLowerCase()],
-        limit: 1);
+        where: 'username = ?', whereArgs: [username.toLowerCase()], limit: 1);
     if (rows.isEmpty) return null;
     final row = rows.single;
     final salt = row['password_salt'] as String;
@@ -1931,6 +1970,132 @@ class LocalDatabase {
     };
   }
 
+  // --- Standalone accounts ------------------------------------------------
+
+  /// Verifies an account that exists only on this device.
+  Future<Map<String, String>?> verifyLocalCredential(
+      String username, String password) async {
+    final rows = await _database.query('local_users',
+        where: 'username = ? COLLATE NOCASE',
+        whereArgs: [username.trim()],
+        limit: 1);
+    if (rows.isEmpty) return null;
+    final row = rows.single;
+    if (row['deactivated_at'] != null) return null;
+    final salt = row['password_salt'] as String;
+    if (_hashPassword(password, salt) != row['password_hash']) return null;
+    return {
+      'id': row['id'] as String,
+      'user_name': row['name'] as String,
+      'user_role': row['role'] as String,
+    };
+  }
+
+  Future<List<Map<String, dynamic>>> localUsers() async {
+    final rows = await _database.query('local_users',
+        columns: [
+          'id',
+          'name',
+          'email',
+          'username',
+          'role',
+          'deactivated_at',
+          'updated_at'
+        ],
+        orderBy: 'name COLLATE NOCASE');
+    return rows.map((row) => Map<String, dynamic>.from(row)).toList();
+  }
+
+  Future<Map<String, dynamic>> createLocalUser({
+    required String name,
+    required String email,
+    required String username,
+    required String password,
+    required String role,
+  }) async {
+    final id = const Uuid().v4();
+    final now = DateTime.now().toUtc().toIso8601String();
+    final salt = _newPasswordSalt();
+    final user = <String, dynamic>{
+      'id': id,
+      'name': name.trim(),
+      'email': email.trim().isEmpty ? null : email.trim(),
+      'username': username.trim(),
+      'password_salt': salt,
+      'password_hash': _hashPassword(password, salt),
+      'role': role,
+      'deactivated_at': null,
+      'created_at': now,
+      'updated_at': now,
+    };
+    try {
+      await _database.insert('local_users', user);
+    } on DatabaseException catch (error) {
+      if (error.isUniqueConstraintError()) {
+        throw StateError('That username is already in use.');
+      }
+      rethrow;
+    }
+    user.remove('password_salt');
+    user.remove('password_hash');
+    user.remove('created_at');
+    return user;
+  }
+
+  Future<void> updateLocalUser({
+    required String id,
+    required String name,
+    required String email,
+    required String username,
+    String? password,
+    required String role,
+  }) async {
+    final rows = await _database.query('local_users',
+        where: 'id = ?', whereArgs: [id], limit: 1);
+    if (rows.isEmpty) throw StateError('Local account not found.');
+    final current = rows.single;
+    final values = <String, Object?>{
+      'name': name.trim(),
+      'email': email.trim().isEmpty ? null : email.trim(),
+      'username': username.trim(),
+      // The built-in administrator must remain an administrator.
+      'role': current['role'] == 'super_admin' ? 'super_admin' : role,
+      'updated_at': DateTime.now().toUtc().toIso8601String(),
+    };
+    if (password != null && password.isNotEmpty) {
+      final salt = _newPasswordSalt();
+      values['password_salt'] = salt;
+      values['password_hash'] = _hashPassword(password, salt);
+    }
+    try {
+      await _database
+          .update('local_users', values, where: 'id = ?', whereArgs: [id]);
+    } on DatabaseException catch (error) {
+      if (error.isUniqueConstraintError()) {
+        throw StateError('That username is already in use.');
+      }
+      rethrow;
+    }
+  }
+
+  Future<void> setLocalUserActive(String id, bool active) async {
+    final rows = await _database.query('local_users',
+        where: 'id = ?', whereArgs: [id], limit: 1);
+    if (rows.isEmpty) throw StateError('Local account not found.');
+    if (rows.single['role'] == 'super_admin' && !active) {
+      throw StateError('The built-in administrator cannot be deactivated.');
+    }
+    await _database.update(
+        'local_users',
+        {
+          'deactivated_at':
+              active ? null : DateTime.now().toUtc().toIso8601String(),
+          'updated_at': DateTime.now().toUtc().toIso8601String(),
+        },
+        where: 'id = ?',
+        whereArgs: [id]);
+  }
+
   // --- Offline staff management -------------------------------------------
 
   /// Replaces the local staff mirror with the list just fetched from the
@@ -1942,22 +2107,26 @@ class LocalDatabase {
       for (final user in users) {
         // Insert raw values (no String casts) so a numeric id/field from the
         // server doesn't crash; the TEXT columns coerce them to text.
-        await txn.insert('staff_users', {
-          'id': user['id']?.toString(),
-          'name': user['name']?.toString() ?? '',
-          'email': user['email']?.toString(),
-          'username': user['username']?.toString(),
-          'role': user['role']?.toString() ?? '',
-          'deactivated_at': user['deactivated_at']?.toString(),
-          'updated_at': now,
-        }, conflictAlgorithm: ConflictAlgorithm.replace);
+        await txn.insert(
+            'staff_users',
+            {
+              'id': user['id']?.toString(),
+              'name': user['name']?.toString() ?? '',
+              'email': user['email']?.toString(),
+              'username': user['username']?.toString(),
+              'role': user['role']?.toString() ?? '',
+              'deactivated_at': user['deactivated_at']?.toString(),
+              'updated_at': now,
+            },
+            conflictAlgorithm: ConflictAlgorithm.replace);
       }
     });
   }
 
   /// The locally cached staff list, ordered by name. Used offline.
   Future<List<Map<String, dynamic>>> cachedStaffUsers() async {
-    final rows = await _database.query('staff_users', orderBy: 'name COLLATE NOCASE');
+    final rows =
+        await _database.query('staff_users', orderBy: 'name COLLATE NOCASE');
     return rows.map((row) => Map<String, dynamic>.from(row)).toList();
   }
 
@@ -2033,8 +2202,8 @@ class LocalDatabase {
     const uuid = Uuid();
     final now = DateTime.now().toUtc().toIso8601String();
     await _database.transaction((txn) async {
-      final rows = await txn
-          .query('staff_users', where: 'id = ?', whereArgs: [id], limit: 1);
+      final rows = await txn.query('staff_users',
+          where: 'id = ?', whereArgs: [id], limit: 1);
       if (rows.isEmpty) throw StateError('Staff member not found.');
       await txn.update(
           'staff_users',
@@ -2069,8 +2238,8 @@ class LocalDatabase {
     const uuid = Uuid();
     final now = DateTime.now().toUtc().toIso8601String();
     await _database.transaction((txn) async {
-      final rows = await txn
-          .query('staff_users', where: 'id = ?', whereArgs: [id], limit: 1);
+      final rows = await txn.query('staff_users',
+          where: 'id = ?', whereArgs: [id], limit: 1);
       if (rows.isEmpty) throw StateError('Staff member not found.');
       await txn.update('staff_users', {'deactivated_at': active ? null : now},
           where: 'id = ?', whereArgs: [id]);
@@ -2227,8 +2396,7 @@ class LocalDatabase {
       // Store/invoice identity settings synced from other devices.
       for (final setting in settings) {
         await txn.insert(
-            'app_settings',
-            {'key': setting['key'], 'value': setting['value']},
+            'app_settings', {'key': setting['key'], 'value': setting['value']},
             conflictAlgorithm: ConflictAlgorithm.replace);
       }
       // Refresh the offline staff mirror so admins can manage staff without a

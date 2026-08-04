@@ -31,7 +31,7 @@ class CreatePosOwner extends Command
             DB::table('branches')->insert(['id' => $branchId, 'business_id' => $businessId, 'name' => 'Main Branch', 'code' => 'MAIN', 'timezone' => config('app.timezone'), 'created_at' => now(), 'updated_at' => now()]);
             User::create(['name' => $this->argument('name'), 'email' => $this->argument('email'), 'password' => Hash::make($password), 'business_id' => $businessId, 'branch_id' => $branchId, 'role' => 'super_admin']);
         });
-        $this->info('POS owner created.');
+        $this->info('Chirpy POS owner created.');
         return self::SUCCESS;
     }
 }

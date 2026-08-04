@@ -22,15 +22,15 @@ async function render() {
   );
 }
 
-test("server-renders the TRX POS marketing page", async () => {
+test("server-renders the Chirpy POS marketing page", async () => {
   const response = await render();
   assert.equal(response.status, 200);
   assert.match(response.headers.get("content-type") ?? "", /^text\/html\b/i);
 
   const html = await response.text();
-  assert.match(html, /<title>TRX POS \| Sell clearly, online or offline<\/title>/i);
+  assert.match(html, /<title>Chirpy POS \| Sell clearly, online or offline<\/title>/i);
   assert.match(html, /Everything your counter needs/);
-  assert.match(html, /Does TRX POS work without internet/);
+  assert.match(html, /Does Chirpy POS work without internet/);
   assert.match(html, /Simple pricing/i);
   assert.doesNotMatch(html, /Your site is taking shape/);
 });

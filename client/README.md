@@ -1,6 +1,7 @@
-# pos_client
+# Chirpy POS
 
-A new Flutter project.
+Offline-first Flutter point-of-sale client for Android and Windows, with
+standalone accounts and optional multi-device server synchronization.
 
 ## Getting Started
 

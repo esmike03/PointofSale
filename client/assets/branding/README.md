@@ -1,6 +1,7 @@
 # App branding
 
 `app_icon.png` is the source image for the Android home-screen (launcher) icon.
+`login_mascot.png` is the transparent pixel-art chick used on the sign-in screen.
 
 ## Change the app icon
 
@@ -20,5 +21,4 @@
 Configuration lives under `flutter_launcher_icons:` in `../../pubspec.yaml`
 (adaptive background colour, min SDK, etc.).
 
-> The current `app_icon.png` is a placeholder (green "POS" bag). Replace it with
-> your real logo.
+Both current images are official Chirpy POS artwork.
