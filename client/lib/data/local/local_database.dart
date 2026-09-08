@@ -9,6 +9,8 @@ import 'package:uuid/uuid.dart';
 
 import '../../sale_tax.dart';
 
+enum SyncQueueScope { all, businessData, products }
+
 class LocalDatabase {
   LocalDatabase(this._database);
   final Database _database;
@@ -1066,7 +1068,9 @@ class LocalDatabase {
   /// Each item uses the same keys as [saveProduct]'s parameters
   /// (name, sellingPrice, unit, sku, barcode, reorderLevel, costPrice,
   /// taxCategory). Returns the number of products inserted.
-  Future<int> importProducts(List<Map<String, Object?>> items) async {
+  Future<int> importProducts(List<Map<String, Object?>> items,
+      {void Function(int processed, int total, String currentProduct)?
+          onProgress}) async {
     if (items.isEmpty) return 0;
     const uuid = Uuid();
     var inserted = 0;
@@ -1095,6 +1099,8 @@ class LocalDatabase {
           'created_at': now,
         });
         inserted++;
+        onProgress?.call(
+            inserted, items.length, item['name']?.toString() ?? 'Product');
       }
     });
     return inserted;
@@ -1647,18 +1653,78 @@ class LocalDatabase {
     return text.isEmpty ? null : text;
   }
 
-  Future<List<Map<String, Object?>>> pendingOperations() =>
-      _database.query('sync_queue',
-          where: 'status = ?', whereArgs: ['pending'], orderBy: 'created_at');
+  static const _productOperationTypes = [
+    'product.create',
+    'product.update',
+    'product.archive',
+    'product.restore',
+    'product.delete',
+  ];
 
-  Future<Map<String, num>> syncSummary() async {
+  static ({String sql, List<Object?> args}) _queueScope(SyncQueueScope scope) {
+    if (scope == SyncQueueScope.all) return (sql: '1 = 1', args: const []);
+    final placeholders =
+        List.filled(_productOperationTypes.length, '?').join(', ');
+    final operator = scope == SyncQueueScope.products ? 'IN' : 'NOT IN';
+    return (
+      sql: 'type $operator ($placeholders)',
+      args: List<Object?>.from(_productOperationTypes),
+    );
+  }
+
+  Future<int> pendingOperationCount(
+      {SyncQueueScope scope = SyncQueueScope.all}) async {
+    final filter = _queueScope(scope);
+    final rows = await _database.rawQuery(
+        "SELECT COUNT(*) AS total FROM sync_queue WHERE status = 'pending' AND ${filter.sql}",
+        filter.args);
+    return (rows.single['total'] as num?)?.toInt() ?? 0;
+  }
+
+  Future<int> maxPendingAttempts(
+      {SyncQueueScope scope = SyncQueueScope.all}) async {
+    final filter = _queueScope(scope);
+    final rows = await _database.rawQuery(
+        "SELECT COALESCE(MAX(attempts), 0) AS attempts FROM sync_queue WHERE status = 'pending' AND ${filter.sql}",
+        filter.args);
+    return (rows.single['attempts'] as num?)?.toInt() ?? 0;
+  }
+
+  /// Queued operations waiting to reach the server, oldest first. [limit]
+  /// keeps a push within the server's per-request maximum.
+  ///
+  /// [maxAttempts] freezes the retry generation for one sync run. Rejected
+  /// rows have their attempt count incremented and then fall out of this query,
+  /// allowing later rows through instead of letting one bad batch block the
+  /// rest of a large import.
+  Future<List<Map<String, Object?>>> pendingOperations(
+      {int? limit,
+      int? maxAttempts,
+      SyncQueueScope scope = SyncQueueScope.all}) {
+    final filter = _queueScope(scope);
+    return _database.query('sync_queue',
+        where:
+            'status = ? AND ${filter.sql}${maxAttempts == null ? '' : ' AND attempts <= ?'}',
+        whereArgs: [
+          'pending',
+          ...filter.args,
+          if (maxAttempts != null) maxAttempts,
+        ],
+        orderBy: 'attempts, created_at',
+        limit: limit);
+  }
+
+  Future<Map<String, num>> syncSummary(
+      {SyncQueueScope scope = SyncQueueScope.all}) async {
+    final filter = _queueScope(scope);
     final rows = await _database.rawQuery('''
       SELECT
         COALESCE(SUM(CASE WHEN status = 'pending' AND last_error IS NULL THEN 1 ELSE 0 END), 0) AS pending_count,
         COALESCE(SUM(CASE WHEN status = 'pending' AND last_error IS NOT NULL THEN 1 ELSE 0 END), 0) AS failed_count,
         COALESCE(SUM(CASE WHEN status = 'synced' THEN 1 ELSE 0 END), 0) AS synced_count
       FROM sync_queue
-    ''');
+      WHERE ${filter.sql}
+    ''', filter.args);
     final row = rows.single;
     return {
       'pending_count': (row['pending_count'] as num?) ?? 0,
@@ -1667,13 +1733,19 @@ class LocalDatabase {
     };
   }
 
-  Future<List<Map<String, Object?>>> syncIssues() => _database.query(
-        'sync_queue',
-        where: 'status = ? AND last_error IS NOT NULL',
-        whereArgs: ['pending'],
-        orderBy: 'created_at DESC',
-        limit: 5,
-      );
+  Future<List<Map<String, Object?>>> syncIssues(
+      {SyncQueueScope scope = SyncQueueScope.all}) {
+    final filter = _queueScope(scope);
+    return _database.rawQuery('''
+      SELECT type, last_error, MAX(attempts) AS attempts,
+             COUNT(*) AS affected_count
+      FROM sync_queue
+      WHERE status = ? AND last_error IS NOT NULL AND ${filter.sql}
+      GROUP BY type, last_error
+      ORDER BY attempts DESC, affected_count DESC
+      LIMIT 5
+    ''', ['pending', ...filter.args]);
+  }
 
   Future<void> adjustInventory(
       {required String branchId,
@@ -1950,9 +2022,10 @@ class LocalDatabase {
   }
 
   /// Verifies [username]/[password] against the locally cached credential.
-  /// Returns the stored session fields (user_name, user_role, branch_id,
-  /// token) when the password matches, or null when there is no cached user
-  /// or the password is wrong.
+  /// Returns the locally usable identity fields when the password matches, or
+  /// null when there is no cached user or the password is wrong. The stored
+  /// bearer token is intentionally not returned: an offline login must not
+  /// claim that an old server session is still valid.
   Future<Map<String, String>?> verifyCachedCredential(
       String username, String password) async {
     final rows = await _database.query('cached_credentials',
@@ -1966,7 +2039,6 @@ class LocalDatabase {
       'user_name': row['user_name'] as String,
       'user_role': row['user_role'] as String,
       'branch_id': row['branch_id'] as String,
-      'token': row['token'] as String,
     };
   }
 
@@ -2253,6 +2325,7 @@ class LocalDatabase {
   }
 
   Future<void> applyServerSnapshot(Map<String, dynamic> snapshot) async {
+    final productsResetAt = snapshot['products_reset_at']?.toString().trim();
     final products = (snapshot['products'] as List<dynamic>? ?? [])
         .cast<Map<String, dynamic>>();
     final inventory = (snapshot['inventory'] as List<dynamic>? ?? [])
@@ -2285,29 +2358,70 @@ class LocalDatabase {
           item['product_id'] as String, () => item['code'] as String);
     }
     await _database.transaction((txn) async {
+      if (productsResetAt != null && productsResetAt.isNotEmpty) {
+        final resetRows = await txn.query('app_settings',
+            columns: ['value'],
+            where: 'key = ?',
+            whereArgs: ['products_reset_at'],
+            limit: 1);
+        final appliedResetAt =
+            resetRows.isEmpty ? null : resetRows.single['value']?.toString();
+        if (appliedResetAt != productsResetAt) {
+          final placeholders =
+              List.filled(_productOperationTypes.length, '?').join(', ');
+          await txn.delete('products');
+          await txn.delete('sync_queue',
+              where: 'type IN ($placeholders)',
+              whereArgs: _productOperationTypes);
+          await txn.delete('app_settings',
+              where: 'key IN (?, ?)',
+              whereArgs: ['sync_watermark_products', 'last_product_synced_at']);
+          await txn.insert('app_settings',
+              {'key': 'products_reset_at', 'value': productsResetAt},
+              conflictAlgorithm: ConflictAlgorithm.replace);
+        }
+      }
       for (final product in products) {
         final id = product['id'] as String;
-        await txn.insert(
-            'products',
-            {
-              'id': id,
-              'sku': product['sku'],
-              'barcode': barcodeByProduct[id],
-              'name': product['name'],
-              'selling_price': product['selling_price'],
-              'cost_price': product['cost_price'] ?? 0,
-              'unit': product['unit'] ?? 'piece',
-              'quantity': inventoryByProduct[id] ?? 0,
-              'reorder_level': product['reorder_level'] ?? 0,
-              'allow_negative_stock': product['allow_negative_stock'] == true ||
-                      product['allow_negative_stock'] == 1
-                  ? 1
-                  : 0,
-              'archived_at': product['deleted_at'],
-              'updated_at': product['updated_at'] ??
-                  DateTime.now().toUtc().toIso8601String(),
-            },
-            conflictAlgorithm: ConflictAlgorithm.replace);
+        final hasInventory = inventoryByProduct.containsKey(id);
+        await txn.rawInsert('''
+          INSERT INTO products (
+            id, sku, barcode, name, selling_price, cost_price, unit, quantity,
+            reorder_level, allow_negative_stock, tax_category, archived_at,
+            updated_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          ON CONFLICT(id) DO UPDATE SET
+            sku = excluded.sku,
+            barcode = excluded.barcode,
+            name = excluded.name,
+            selling_price = excluded.selling_price,
+            cost_price = excluded.cost_price,
+            unit = excluded.unit,
+            quantity = CASE WHEN ? = 1 THEN excluded.quantity ELSE products.quantity END,
+            reorder_level = excluded.reorder_level,
+            allow_negative_stock = excluded.allow_negative_stock,
+            tax_category = excluded.tax_category,
+            archived_at = excluded.archived_at,
+            updated_at = excluded.updated_at
+        ''', [
+          id,
+          product['sku'],
+          barcodeByProduct[id],
+          product['name'],
+          product['selling_price'],
+          product['cost_price'] ?? 0,
+          product['unit'] ?? 'piece',
+          inventoryByProduct[id] ?? 0,
+          product['reorder_level'] ?? 0,
+          product['allow_negative_stock'] == true ||
+                  product['allow_negative_stock'] == 1
+              ? 1
+              : 0,
+          product['tax_category'] ?? 'vatable',
+          product['deleted_at'],
+          product['updated_at'] ?? DateTime.now().toUtc().toIso8601String(),
+          hasInventory ? 1 : 0,
+        ]);
       }
       for (final item in inventory) {
         await txn.update('products', {'quantity': item['quantity'] ?? 0},
@@ -2420,5 +2534,60 @@ class LocalDatabase {
         }
       }
     });
+  }
+
+  /// Clears only the local product catalog and product sync queue after an
+  /// authorized server reset. Sales and other operational history are kept.
+  Future<void> resetProductData({required String resetAt}) async {
+    final normalizedResetAt = resetAt.trim();
+    if (normalizedResetAt.isEmpty) {
+      throw ArgumentError.value(resetAt, 'resetAt', 'Reset time is required.');
+    }
+    final placeholders =
+        List.filled(_productOperationTypes.length, '?').join(', ');
+    await _database.transaction((txn) async {
+      await txn.delete('products');
+      await txn.delete('sync_queue',
+          where: 'type IN ($placeholders)', whereArgs: _productOperationTypes);
+      await txn.delete('app_settings',
+          where: 'key IN (?, ?)',
+          whereArgs: ['sync_watermark_products', 'last_product_synced_at']);
+      await txn.insert('app_settings',
+          {'key': 'products_reset_at', 'value': normalizedResetAt},
+          conflictAlgorithm: ConflictAlgorithm.replace);
+    });
+  }
+
+  /// Removes every local business record and device/session setting while
+  /// preserving the database schema. The installation returns to the same
+  /// state as a newly created app, including its initial standalone admin.
+  Future<void> resetAllData() async {
+    final savedLogoPath = await setting('logo_path');
+    await _database.transaction((txn) async {
+      final tables = await txn.rawQuery('''
+        SELECT name FROM sqlite_master
+        WHERE type = 'table' AND name NOT LIKE 'sqlite_%'
+      ''');
+      for (final row in tables) {
+        final name = row['name']! as String;
+        final quoted = name.replaceAll('"', '""');
+        await txn.execute('DELETE FROM "$quoted"');
+      }
+      await _ensureDefaultLocalAdmin(txn);
+    });
+    // Reclaim the space left by a large imported catalog. VACUUM must run
+    // outside the transaction and is safe after all rows were committed.
+    await _database.execute('VACUUM');
+    if (savedLogoPath != null && savedLogoPath.isNotEmpty) {
+      final logo = File(savedLogoPath);
+      if (await logo.exists()) {
+        try {
+          await logo.delete();
+        } on FileSystemException {
+          // The database reset is complete even if the OS has the old image
+          // temporarily locked by a widget that is about to be disposed.
+        }
+      }
+    }
   }
 }

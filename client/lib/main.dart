@@ -317,6 +317,7 @@ class _HomeShellState extends State<HomeShell> {
     await widget.database.saveSetting('token', '');
     await widget.database.saveSetting('user_name', '');
     await widget.database.saveSetting('user_role', '');
+    await widget.database.saveSetting('offline_session', '0');
     widget.onSignedOut?.call();
   }
 
@@ -494,31 +495,43 @@ class _DesktopSidebar extends StatelessWidget {
                       ? MainAxisAlignment.center
                       : MainAxisAlignment.start,
                   children: [
-                    if (!compact) ...[
-                      const Padding(
-                          padding: EdgeInsets.only(left: 18),
+                    // Expanded rather than Spacer: the title has to give way to
+                    // the control button, not push it off the 210px sidebar.
+                    if (!compact)
+                      const Expanded(
+                        child: Padding(
+                          padding: EdgeInsets.only(left: 14),
                           child: Text('Chirpy POS',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
                               style: TextStyle(
-                                  fontSize: 18, fontWeight: FontWeight.w700))),
-                      const Spacer(),
-                    ],
+                                  fontSize: 18, fontWeight: FontWeight.w700)),
+                        ),
+                      ),
                     if (compact) const Spacer(),
                     _SidebarControl(
                         compact: compact, onCompact: onCompact, onHide: onHide),
-                    if (compact) const Spacer() else const SizedBox(width: 8),
+                    if (compact) const Spacer() else const SizedBox(width: 6),
                   ]),
             ),
             const Divider(height: 1),
             const SizedBox(height: 8),
-            for (final entry in entries)
-              _SidebarItem(
-                icon: entry.$2,
-                label: entry.$3,
-                selected: selected == entry.$1,
-                compact: compact,
-                onTap: () => onSelect(entry.$1),
+            // Scrolls rather than overflows when the window is too short to
+            // show every module at once.
+            Expanded(
+              child: SingleChildScrollView(
+                child: Column(children: [
+                  for (final entry in entries)
+                    _SidebarItem(
+                      icon: entry.$2,
+                      label: entry.$3,
+                      selected: selected == entry.$1,
+                      compact: compact,
+                      onTap: () => onSelect(entry.$1),
+                    ),
+                ]),
               ),
-            const Spacer(),
+            ),
             _SidebarItem(
               icon: LucideIcons.logOut,
               label: 'Sign out',
@@ -585,6 +598,10 @@ class _SidebarItem extends StatelessWidget {
         height: 48,
         margin: EdgeInsets.symmetric(horizontal: compact ? 8 : 10, vertical: 2),
         padding: EdgeInsets.symmetric(horizontal: compact ? 0 : 14),
+        // The sidebar animates its width, so for a few frames after expanding
+        // the labels are laid out against the collapsed 64px. Clip and let the
+        // label flex so those frames don't report an overflow.
+        clipBehavior: Clip.hardEdge,
         decoration: BoxDecoration(
           color: selected ? null : Colors.transparent,
           gradient: selected
@@ -603,11 +620,16 @@ class _SidebarItem extends StatelessWidget {
                   color: selected ? Colors.white : colors.onSurfaceVariant),
               if (!compact) ...[
                 const SizedBox(width: 12),
-                Text(label,
-                    style: TextStyle(
-                        color: selected ? Colors.white : colors.onSurface,
-                        fontWeight:
-                            selected ? FontWeight.w700 : FontWeight.w500))
+                Flexible(
+                  child: Text(label,
+                      maxLines: 1,
+                      softWrap: false,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                          color: selected ? Colors.white : colors.onSurface,
+                          fontWeight:
+                              selected ? FontWeight.w700 : FontWeight.w500)),
+                ),
               ],
             ]),
       ),
@@ -635,17 +657,177 @@ class _QuantityButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Tooltip(
         message: tooltip,
-        child: SizedBox(
-          width: 30,
-          height: 30,
-          child: IconButton(
-            onPressed: onPressed,
-            padding: EdgeInsets.zero,
-            visualDensity: VisualDensity.compact,
-            icon: Icon(icon, size: 16),
+        child: Material(
+          color: const Color(0xffedf7f2),
+          borderRadius: BorderRadius.circular(10),
+          child: InkWell(
+            onTap: onPressed,
+            borderRadius: BorderRadius.circular(10),
+            child: SizedBox(
+              width: 32,
+              height: 32,
+              child: Icon(icon, size: 16, color: const Color(0xff176f52)),
+            ),
           ),
         ),
       );
+}
+
+/// Small caps label used to separate the sections of the payment sheet.
+class _SheetLabel extends StatelessWidget {
+  const _SheetLabel(this.label);
+  final String label;
+
+  @override
+  Widget build(BuildContext context) => Text(
+        label,
+        style: const TextStyle(
+          color: Color(0xff7d918a),
+          fontSize: 10,
+          fontWeight: FontWeight.w800,
+          letterSpacing: 1.1,
+        ),
+      );
+}
+
+class _MethodPill extends StatelessWidget {
+  const _MethodPill(
+      {required this.label,
+      required this.icon,
+      required this.selected,
+      required this.onTap});
+  final String label;
+  final IconData icon;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) => Material(
+        color: selected ? const Color(0xff0e8a60) : const Color(0xfff4f8f6),
+        borderRadius: BorderRadius.circular(999),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: onTap,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(999),
+              border: Border.all(
+                  color: selected
+                      ? const Color(0xff0e8a60)
+                      : const Color(0xffe1ebe6)),
+            ),
+            child: Row(mainAxisSize: MainAxisSize.min, children: [
+              Icon(icon,
+                  size: 16,
+                  color: selected ? Colors.white : const Color(0xff5c7d70)),
+              const SizedBox(width: 7),
+              Text(
+                label,
+                style: TextStyle(
+                  color: selected ? Colors.white : const Color(0xff41645a),
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ]),
+          ),
+        ),
+      );
+}
+
+/// Quick tender buttons so a cashier does not have to type the cash received.
+class _TenderChip extends StatelessWidget {
+  const _TenderChip({required this.label, required this.onTap});
+  final String label;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) => Material(
+        color: const Color(0xfff0f6f3),
+        borderRadius: BorderRadius.circular(12),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            child: Text(
+              label,
+              style: const TextStyle(
+                color: Color(0xff37695a),
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+        ),
+      );
+}
+
+class _PaymentPartRow extends StatelessWidget {
+  const _PaymentPartRow(
+      {required this.method, required this.amount, required this.onRemove});
+  final String method;
+  final double amount;
+  final VoidCallback onRemove;
+
+  @override
+  Widget build(BuildContext context) => Container(
+        padding: const EdgeInsets.fromLTRB(12, 8, 6, 8),
+        decoration: BoxDecoration(
+          color: const Color(0xfff8fbf9),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: const Color(0xffe4ece8)),
+        ),
+        child: Row(children: [
+          Expanded(
+            child: Text(
+              method.replaceAll('_', ' ').toUpperCase(),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                color: Color(0xff315c4f),
+                fontSize: 12,
+                fontWeight: FontWeight.w800,
+                letterSpacing: .4,
+              ),
+            ),
+          ),
+          Text(
+            'PHP ${amount.toStringAsFixed(2)}',
+            style: const TextStyle(
+                color: Color(0xff126d50), fontWeight: FontWeight.w800),
+          ),
+          IconButton(
+            onPressed: onRemove,
+            tooltip: 'Remove payment',
+            icon: const Icon(LucideIcons.x, size: 16),
+            color: const Color(0xff7b8f88),
+          ),
+        ]),
+      );
+}
+
+/// Cash amounts a cashier is likely to be handed for a sale of [due].
+List<(String, double)> _tenderSuggestions(double due) {
+  if (due <= 0) return const [];
+  final options = <(String, double)>[
+    ('Exact', double.parse(due.toStringAsFixed(2)))
+  ];
+  final seen = <double>{double.parse(due.toStringAsFixed(2))};
+  void add(double value) {
+    final rounded = double.parse(value.toStringAsFixed(2));
+    if (rounded > due + .004 && options.length < 5 && seen.add(rounded)) {
+      options.add(('PHP ${rounded.toStringAsFixed(0)}', rounded));
+    }
+  }
+
+  add((due / 50).ceil() * 50);
+  add((due / 100).ceil() * 100);
+  for (final note in const [100.0, 200.0, 500.0, 1000.0]) {
+    add(note);
+  }
+  return options;
 }
 
 class _EmptyCart extends StatelessWidget {
@@ -654,22 +836,31 @@ class _EmptyCart extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Center(
         child: Column(mainAxisSize: MainAxisSize.min, children: [
-          Container(
-            width: 48,
-            height: 48,
-            alignment: Alignment.center,
-            decoration: const BoxDecoration(
-                color: Color(0xffeff8f1),
-                borderRadius: BorderRadius.all(Radius.circular(6))),
-            child:
-                const Icon(LucideIcons.shoppingCart, color: Color(0xff16803d)),
+          SizedBox(
+            width: 122,
+            height: 108,
+            child: Image.asset(
+              'assets/branding/login_mascot.png',
+              fit: BoxFit.contain,
+              filterQuality: FilterQuality.none,
+              isAntiAlias: false,
+            ),
           ),
-          const SizedBox(height: 12),
-          const Text('Your cart is empty',
-              style: TextStyle(fontWeight: FontWeight.w700)),
-          const SizedBox(height: 4),
-          Text('Select a product or scan a barcode.',
-              style: Theme.of(context).textTheme.bodySmall),
+          const SizedBox(height: 8),
+          const Text(
+            'Ready for a new order',
+            style: TextStyle(
+              color: Color(0xff173f34),
+              fontSize: 16,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          const SizedBox(height: 5),
+          const Text(
+            'Tap a product or scan its barcode\nto start building the cart.',
+            textAlign: TextAlign.center,
+            style: TextStyle(color: Color(0xff758b84), fontSize: 12),
+          ),
         ]),
       );
 }
@@ -684,6 +875,8 @@ class PosScreen extends StatefulWidget {
 }
 
 class _PosScreenState extends State<PosScreen> {
+  static const _catalogPageSize = 50;
+
   final queryController = TextEditingController();
   final searchFocus = FocusNode();
   final List<Map<String, Object?>> cart = [];
@@ -691,6 +884,7 @@ class _PosScreenState extends State<PosScreen> {
   DateTime? _lastScanKeyAt;
   bool _scannerSpeed = true;
   bool? _listCatalogView;
+  int _catalogPage = 0;
   double _saleDiscount = 0;
   String? _saleDiscountReason;
   StateSetter? _cartSheetSetState;
@@ -720,28 +914,60 @@ class _PosScreenState extends State<PosScreen> {
   }
 
   Widget _registerGate() => Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
+        child: Container(
+          constraints: const BoxConstraints(maxWidth: 430),
+          margin: const EdgeInsets.all(24),
+          padding: const EdgeInsets.all(28),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(28),
+            border: Border.all(color: const Color(0xffe0ebe6)),
+            boxShadow: const [
+              BoxShadow(
+                color: Color(0x16164c3d),
+                blurRadius: 32,
+                offset: Offset(0, 14),
+              ),
+            ],
+          ),
           child: Column(mainAxisSize: MainAxisSize.min, children: [
-            const Icon(LucideIcons.lockKeyhole,
-                size: 44, color: Color(0xffb45309)),
-            const SizedBox(height: 14),
-            Text('Open the cash register first',
-                textAlign: TextAlign.center,
-                style: Theme.of(context)
-                    .textTheme
-                    .titleLarge
-                    ?.copyWith(fontWeight: FontWeight.w800)),
-            const SizedBox(height: 6),
-            Text(
-                'Start a register shift before making sales so your cash drawer stays accurate.',
-                textAlign: TextAlign.center,
-                style: Theme.of(context).textTheme.bodyMedium),
+            Container(
+              width: 64,
+              height: 64,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: const Color(0xfffff3cf),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: const Icon(LucideIcons.lockKeyhole,
+                  size: 28, color: Color(0xffad6b00)),
+            ),
             const SizedBox(height: 18),
-            FilledButton.icon(
-              onPressed: () => widget.onRequestRegister?.call(),
-              icon: const Icon(LucideIcons.banknote, size: 18),
-              label: const Text('Go to Register'),
+            Text('Open the register to begin',
+                textAlign: TextAlign.center,
+                style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                    color: const Color(0xff173f34),
+                    fontWeight: FontWeight.w800)),
+            const SizedBox(height: 8),
+            const Text(
+              'Start a shift before making sales so cash totals and drawer activity stay accurate.',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: Color(0xff6f8580), height: 1.45),
+            ),
+            const SizedBox(height: 22),
+            SizedBox(
+              width: double.infinity,
+              height: 52,
+              child: FilledButton.icon(
+                style: FilledButton.styleFrom(
+                  backgroundColor: const Color(0xff0e8a60),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16)),
+                ),
+                onPressed: () => widget.onRequestRegister?.call(),
+                icon: const Icon(LucideIcons.banknote, size: 18),
+                label: const Text('Open Register'),
+              ),
             ),
           ]),
         ),
@@ -769,54 +995,95 @@ class _PosScreenState extends State<PosScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final wide = MediaQuery.sizeOf(context).width >= 800;
+    final screenWidth = MediaQuery.sizeOf(context).width;
+    final wide = screenWidth >= 900;
+    final compact = screenWidth < 430;
     final gated = _shiftLoaded && _userRole == 'cashier' && !_hasOpenShift;
     return Scaffold(
+      backgroundColor: const Color(0xfff3f8f5),
       appBar: AppBar(
+        backgroundColor: const Color(0xfff3f8f5),
+        surfaceTintColor: Colors.transparent,
         leading: AppMenu.leadingOf(context),
         title: const Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('Sale'),
-              Text('Counter checkout',
-                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500)),
-            ]),
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('New sale'),
+            Text(
+              'Build an order and check out',
+              style: TextStyle(
+                color: Color(0xff6c827a),
+                fontSize: 11.5,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ],
+        ),
         actions: [
           if (!Platform.isAndroid)
             IconButton(
                 onPressed: () => searchFocus.requestFocus(),
                 tooltip: 'Focus barcode input',
                 icon: const Icon(LucideIcons.scanBarcode)),
-          const Padding(
-            padding: EdgeInsets.only(right: 16),
+          Padding(
+            padding: const EdgeInsets.only(right: 14),
             child: Center(
-              child: Chip(
-                avatar: Icon(LucideIcons.circleCheck,
-                    size: 15, color: Color(0xff16803d)),
-                label: Text('Offline ready'),
+              child: Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+                decoration: BoxDecoration(
+                  color: const Color(0xffe5f7ee),
+                  borderRadius: BorderRadius.circular(999),
+                  border: Border.all(color: const Color(0xffc5e9d8)),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(LucideIcons.circleCheck,
+                        size: 15, color: Color(0xff0e8a60)),
+                    const SizedBox(width: 6),
+                    Text(
+                      compact ? 'Ready' : 'Offline ready',
+                      style: const TextStyle(
+                        color: Color(0xff176f52),
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
         ],
       ),
-      body: !_shiftLoaded
-          ? const Center(child: CircularProgressIndicator())
-          : gated
-              ? _registerGate()
-              : wide
-                  ? Padding(
-                      padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
-                      child: Row(children: [
-                        Expanded(child: _catalog()),
-                        const SizedBox(width: 20),
-                        SizedBox(width: 390, child: _cart())
-                      ]),
-                    )
-                  : Padding(
-                      padding: const EdgeInsets.fromLTRB(12, 12, 12, 4),
-                      child: _catalog(),
-                    ),
+      body: DecoratedBox(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [Color(0xfff3f8f5), Color(0xfff8fbf6)],
+          ),
+        ),
+        child: !_shiftLoaded
+            ? const Center(child: CircularProgressIndicator())
+            : gated
+                ? _registerGate()
+                : wide
+                    ? Padding(
+                        padding: const EdgeInsets.fromLTRB(22, 14, 22, 22),
+                        child: Row(children: [
+                          Expanded(child: _catalog()),
+                          const SizedBox(width: 18),
+                          SizedBox(width: 410, child: _cart())
+                        ]),
+                      )
+                    : Padding(
+                        padding: const EdgeInsets.fromLTRB(12, 10, 12, 4),
+                        child: _catalog(),
+                      ),
+      ),
       bottomNavigationBar:
           (wide || gated || !_shiftLoaded) ? null : _mobileCartBar(),
       floatingActionButton: (Platform.isAndroid && _shiftLoaded && !gated)
@@ -831,241 +1098,484 @@ class _PosScreenState extends State<PosScreen> {
     );
   }
 
+  Color _productAccent(Map<String, Object?> product) {
+    const accents = [
+      Color(0xff0e8a60),
+      Color(0xff1686a8),
+      Color(0xffd08118),
+      Color(0xff7a65b5),
+      Color(0xffd05b6f),
+    ];
+    final name = product['name']?.toString() ?? '';
+    final score = name.codeUnits.fold<int>(0, (total, code) => total + code);
+    return accents[score % accents.length];
+  }
+
   Widget _catalog() {
     final listCatalogView =
         _listCatalogView ?? MediaQuery.sizeOf(context).width < 800;
-    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      Row(children: [
-        const Icon(LucideIcons.package, size: 19),
-        const SizedBox(width: 8),
-        Flexible(
-          child: Text('Products',
-              style: Theme.of(context).textTheme.titleLarge,
-              overflow: TextOverflow.ellipsis),
-        ),
-        const Spacer(),
-        Tooltip(
-          message: listCatalogView ? 'Card view' : 'List view',
-          child: IconButton(
-            // On mobile the toggle is the last element in the row, so pin its
-            // icon to the right edge instead of leaving the tap-target's gap
-            // (on desktop the 'Scan item' button sits to its right).
-            alignment:
-                Platform.isAndroid ? Alignment.centerRight : Alignment.center,
-            onPressed: () =>
-                setState(() => _listCatalogView = !listCatalogView),
-            icon: Icon(
-                listCatalogView ? LucideIcons.layoutGrid : LucideIcons.list),
+    return Container(
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: .88),
+        borderRadius: BorderRadius.circular(28),
+        border: Border.all(color: const Color(0xffe1ebe7)),
+      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          Container(
+            width: 42,
+            height: 42,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: const Color(0xffe4f7ef),
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: const Icon(LucideIcons.package,
+                size: 20, color: Color(0xff0e8a60)),
           ),
-        ),
-        if (!Platform.isAndroid)
-          TextButton.icon(
+          const SizedBox(width: 11),
+          const Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Product catalog',
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: Color(0xff173f34),
+                    fontSize: 18,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                Text(
+                  'Tap an item to add it to the order',
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(color: Color(0xff74877f), fontSize: 11.5),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          Tooltip(
+            message: listCatalogView ? 'Card view' : 'List view',
+            child: Material(
+              color: const Color(0xfff0f5f2),
+              borderRadius: BorderRadius.circular(12),
+              child: IconButton(
+                onPressed: () =>
+                    setState(() => _listCatalogView = !listCatalogView),
+                icon: Icon(listCatalogView
+                    ? LucideIcons.layoutGrid
+                    : LucideIcons.list),
+                color: const Color(0xff37695a),
+                iconSize: 19,
+              ),
+            ),
+          ),
+          if (!Platform.isAndroid) ...[
+            const SizedBox(width: 8),
+            TextButton.icon(
               onPressed: () => searchFocus.requestFocus(),
               icon: const Icon(LucideIcons.scanBarcode, size: 18),
-              label: const Text('Scan item')),
-      ]),
-      const SizedBox(height: 14),
-      TextField(
-        controller: queryController,
-        focusNode: searchFocus,
-        // Don't pop the keyboard open on mobile; only autofocus on desktop.
-        autofocus: MediaQuery.sizeOf(context).width >= 800,
-        onChanged: (_) => setState(() {}),
-        decoration: const InputDecoration(
-            prefixIcon: Icon(LucideIcons.search),
-            hintText: 'Search by name, SKU, or barcode',
-            border: OutlineInputBorder()),
-      ),
-      const SizedBox(height: 14),
-      Expanded(
-        child: FutureBuilder<List<Map<String, Object?>>>(
-          future: widget.database.searchProducts(queryController.text),
-          builder: (context, snapshot) {
-            final products = snapshot.data ?? [];
-            if (products.isEmpty) {
-              return const Center(
-                  child: Text(
-                      'No products match your search. Add products from the Products tab.'));
-            }
-            if (listCatalogView) {
-              return ListView.separated(
-                itemCount: products.length,
-                separatorBuilder: (_, __) => const _SoftDivider(),
-                itemBuilder: (_, index) {
-                  final product = products[index];
-                  final quantity = (product['quantity'] as num).toDouble();
-                  final lowStock =
-                      quantity <= (product['reorder_level'] as num).toDouble();
-                  return InkWell(
-                    onTap: () => _addToCart(product),
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(
-                          vertical: 12, horizontal: 4),
-                      child: Row(children: [
-                        Container(
-                            width: 38,
-                            height: 38,
-                            alignment: Alignment.center,
-                            decoration: const BoxDecoration(
-                                color: Color(0xffe9f5ec),
-                                borderRadius:
-                                    BorderRadius.all(Radius.circular(6))),
-                            child: const Icon(LucideIcons.package,
-                                size: 19, color: Color(0xff16803d))),
-                        const SizedBox(width: 12),
-                        Expanded(
-                            child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                              Text(product['name']! as String,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: const TextStyle(
-                                      fontWeight: FontWeight.w700)),
-                              const SizedBox(height: 3),
-                              Text(
-                                  '${product['sku'] ?? 'No SKU'}  |  ${quantity.toStringAsFixed(2)} ${product['unit']}',
-                                  style: Theme.of(context)
-                                      .textTheme
-                                      .bodySmall
-                                      ?.copyWith(
-                                          color: lowStock
-                                              ? const Color(0xffb45309)
-                                              : null))
-                            ])),
-                        const SizedBox(width: 12),
-                        Text(
-                            'PHP ${(product['selling_price'] as num).toStringAsFixed(2)}',
-                            style: const TextStyle(
-                                fontWeight: FontWeight.w800,
-                                color: Color(0xff146c34))),
-                        const SizedBox(width: 8),
-                        const Icon(LucideIcons.circlePlus,
-                            color: Color(0xff16803d), size: 20),
-                      ]),
-                    ),
-                  );
-                },
-              );
-            }
-            return GridView.builder(
-              gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                  maxCrossAxisExtent: 230,
-                  mainAxisSpacing: 12,
-                  crossAxisSpacing: 12,
-                  mainAxisExtent: 158),
-              itemCount: products.length,
-              itemBuilder: (_, index) {
-                final product = products[index];
-                final quantity = (product['quantity'] as num).toDouble();
-                final lowStock =
-                    quantity <= (product['reorder_level'] as num).toDouble();
-                return Card(
-                  margin: EdgeInsets.zero,
-                  clipBehavior: Clip.antiAlias,
-                  child: Tooltip(
-                    message: product['name']! as String,
-                    waitDuration: const Duration(milliseconds: 400),
-                    child: InkWell(
-                      onTap: () => _addToCart(product),
-                      child: Padding(
-                        padding: const EdgeInsets.all(14),
-                        child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(children: [
-                                Container(
-                                  width: 34,
-                                  height: 34,
-                                  alignment: Alignment.center,
-                                  decoration: const BoxDecoration(
-                                      color: Color(0xffe9f5ec),
-                                      borderRadius:
-                                          BorderRadius.all(Radius.circular(6))),
-                                  child: const Icon(LucideIcons.package,
-                                      size: 18, color: Color(0xff16803d)),
-                                ),
-                                const Spacer(),
-                                IconButton(
-                                  onPressed: () => _addToCart(product),
-                                  tooltip: 'Add to cart',
-                                  visualDensity: VisualDensity.compact,
-                                  padding: EdgeInsets.zero,
-                                  constraints: const BoxConstraints(
-                                      minWidth: 34,
-                                      minHeight: 34,
-                                      maxHeight: 34),
-                                  icon: const Icon(LucideIcons.circlePlus,
-                                      color: Color(0xff16803d)),
-                                ),
-                              ]),
-                              const SizedBox(height: 10),
-                              Expanded(
-                                child: Align(
-                                  alignment: Alignment.topLeft,
-                                  child: Text(product['name']! as String,
-                                      maxLines: 2,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: const TextStyle(
-                                          fontWeight: FontWeight.w700)),
-                                ),
-                              ),
-                              Text(
-                                  'PHP ${(product['selling_price'] as num).toStringAsFixed(2)}',
-                                  style: Theme.of(context)
-                                      .textTheme
-                                      .titleMedium
-                                      ?.copyWith(
-                                          color: const Color(0xff16803d),
-                                          fontWeight: FontWeight.w800)),
-                              const SizedBox(height: 4),
-                              Text(
-                                '${product['quantity']} ${product['unit']} available',
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: Theme.of(context)
-                                    .textTheme
-                                    .bodySmall
-                                    ?.copyWith(
-                                        color: lowStock
-                                            ? const Color(0xffb45309)
-                                            : null),
-                              ),
-                            ]),
+              label: const Text('Scan item'),
+            ),
+          ],
+        ]),
+        const SizedBox(height: 15),
+        TextField(
+          controller: queryController,
+          focusNode: searchFocus,
+          autofocus: MediaQuery.sizeOf(context).width >= 900,
+          onChanged: (_) => setState(() => _catalogPage = 0),
+          decoration: InputDecoration(
+            filled: true,
+            fillColor: const Color(0xfff4f8f6),
+            prefixIcon: const Icon(LucideIcons.search,
+                size: 20, color: Color(0xff5f7b72)),
+            hintText: 'Search products, SKU, or barcode',
+            hintStyle: const TextStyle(color: Color(0xff8ca099)),
+            suffixIcon: queryController.text.isNotEmpty
+                ? IconButton(
+                    tooltip: 'Clear search',
+                    onPressed: () {
+                      queryController.clear();
+                      setState(() => _catalogPage = 0);
+                    },
+                    icon: const Icon(LucideIcons.x, size: 18),
+                  )
+                : Platform.isAndroid
+                    ? IconButton(
+                        tooltip: 'Scan with camera',
+                        onPressed: _openCameraScanner,
+                        icon: const Icon(LucideIcons.qrCode, size: 19),
+                      )
+                    : null,
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(17),
+              borderSide: BorderSide.none,
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(17),
+              borderSide: const BorderSide(color: Color(0xffe1ebe6)),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(17),
+              borderSide:
+                  const BorderSide(color: Color(0xff15a675), width: 1.5),
+            ),
+          ),
+        ),
+        const SizedBox(height: 13),
+        Expanded(
+          child: FutureBuilder<List<Map<String, Object?>>>(
+            future: widget.database.searchProducts(
+              queryController.text,
+              limit: _catalogPageSize + 1,
+              offset: _catalogPage * _catalogPageSize,
+            ),
+            builder: (context, snapshot) {
+              if (snapshot.connectionState == ConnectionState.waiting &&
+                  snapshot.data == null) {
+                return const Center(child: CircularProgressIndicator());
+              }
+              final rows = snapshot.data ?? [];
+              final products = rows.take(_catalogPageSize).toList();
+              final hasNext = rows.length > _catalogPageSize;
+              if (products.isEmpty) {
+                return Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        width: 62,
+                        height: 62,
+                        alignment: Alignment.center,
+                        decoration: BoxDecoration(
+                          color: const Color(0xfff0f6f3),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: const Icon(LucideIcons.searchX,
+                            color: Color(0xff6e867e), size: 26),
                       ),
-                    ),
+                      const SizedBox(height: 14),
+                      const Text(
+                        'No products found',
+                        style: TextStyle(
+                          color: Color(0xff274b41),
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      const Text(
+                        'Try another search or add products first.',
+                        style:
+                            TextStyle(color: Color(0xff7b8f88), fontSize: 12),
+                      ),
+                    ],
                   ),
                 );
-              },
-            );
-          },
+              }
+              if (listCatalogView) {
+                return Column(
+                  children: [
+                    Expanded(
+                      child: ListView.separated(
+                        padding: const EdgeInsets.only(top: 2, bottom: 4),
+                        itemCount: products.length,
+                        separatorBuilder: (_, __) => const SizedBox(height: 8),
+                        itemBuilder: (_, index) {
+                          final product = products[index];
+                          final accent = _productAccent(product);
+                          final quantity =
+                              (product['quantity'] as num).toDouble();
+                          final lowStock = quantity <=
+                              (product['reorder_level'] as num).toDouble();
+                          return Material(
+                            color: const Color(0xfffbfdfc),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(18),
+                              side: const BorderSide(color: Color(0xffe6eeea)),
+                            ),
+                            clipBehavior: Clip.antiAlias,
+                            child: InkWell(
+                              onTap: () => _addToCart(product),
+                              child: Padding(
+                                padding: const EdgeInsets.all(12),
+                                child: Row(children: [
+                                  Container(
+                                    width: 46,
+                                    height: 46,
+                                    alignment: Alignment.center,
+                                    decoration: BoxDecoration(
+                                      color: accent.withValues(alpha: .11),
+                                      borderRadius: BorderRadius.circular(15),
+                                    ),
+                                    child: Icon(LucideIcons.package,
+                                        size: 21, color: accent),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          product['name']! as String,
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: const TextStyle(
+                                            color: Color(0xff203f36),
+                                            fontWeight: FontWeight.w800,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 4),
+                                        Text(
+                                          '${product['sku'] ?? 'No SKU'}  •  ${quantity.toStringAsFixed(quantity % 1 == 0 ? 0 : 1)} ${product['unit']}',
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: TextStyle(
+                                            color: lowStock
+                                                ? const Color(0xffb26b00)
+                                                : const Color(0xff74877f),
+                                            fontSize: 11.5,
+                                            fontWeight: lowStock
+                                                ? FontWeight.w700
+                                                : FontWeight.w500,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    'PHP ${(product['selling_price'] as num).toStringAsFixed(2)}',
+                                    style: const TextStyle(
+                                      color: Color(0xff126d50),
+                                      fontWeight: FontWeight.w800,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 9),
+                                  Container(
+                                    width: 36,
+                                    height: 36,
+                                    alignment: Alignment.center,
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xff0e8a60),
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                    child: const Icon(LucideIcons.plus,
+                                        color: Colors.white, size: 18),
+                                  ),
+                                ]),
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                    PaginationControls(
+                      page: _catalogPage,
+                      hasNext: hasNext,
+                      onPrevious: _catalogPage == 0
+                          ? null
+                          : () => setState(() => _catalogPage--),
+                      onNext:
+                          hasNext ? () => setState(() => _catalogPage++) : null,
+                    ),
+                  ],
+                );
+              }
+              return Column(
+                children: [
+                  Expanded(
+                    child: GridView.builder(
+                      padding: const EdgeInsets.only(top: 2, bottom: 4),
+                      gridDelegate:
+                          const SliverGridDelegateWithMaxCrossAxisExtent(
+                        maxCrossAxisExtent: 220,
+                        mainAxisSpacing: 10,
+                        crossAxisSpacing: 10,
+                        mainAxisExtent: 198,
+                      ),
+                      itemCount: products.length,
+                      itemBuilder: (_, index) {
+                        final product = products[index];
+                        final accent = _productAccent(product);
+                        final quantity =
+                            (product['quantity'] as num).toDouble();
+                        final lowStock = quantity <=
+                            (product['reorder_level'] as num).toDouble();
+                        return Material(
+                          color: const Color(0xfffbfdfc),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(20),
+                            side: const BorderSide(color: Color(0xffe4ece8)),
+                          ),
+                          clipBehavior: Clip.antiAlias,
+                          child: Tooltip(
+                            message: product['name']! as String,
+                            waitDuration: const Duration(milliseconds: 400),
+                            child: InkWell(
+                              onTap: () => _addToCart(product),
+                              child: Padding(
+                                padding: const EdgeInsets.all(13),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(children: [
+                                      Container(
+                                        width: 44,
+                                        height: 44,
+                                        alignment: Alignment.center,
+                                        decoration: BoxDecoration(
+                                          color: accent.withValues(alpha: .11),
+                                          borderRadius:
+                                              BorderRadius.circular(15),
+                                        ),
+                                        child: Icon(LucideIcons.package,
+                                            size: 21, color: accent),
+                                      ),
+                                      const Spacer(),
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(
+                                            horizontal: 8, vertical: 5),
+                                        decoration: BoxDecoration(
+                                          color: lowStock
+                                              ? const Color(0xfffff1d8)
+                                              : const Color(0xffedf6f1),
+                                          borderRadius:
+                                              BorderRadius.circular(999),
+                                        ),
+                                        child: Text(
+                                          lowStock
+                                              ? 'Low stock'
+                                              : '${quantity.toStringAsFixed(quantity % 1 == 0 ? 0 : 1)} ${product['unit']}',
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: TextStyle(
+                                            color: lowStock
+                                                ? const Color(0xffa86100)
+                                                : const Color(0xff52756a),
+                                            fontSize: 9.5,
+                                            fontWeight: FontWeight.w700,
+                                          ),
+                                        ),
+                                      ),
+                                    ]),
+                                    const SizedBox(height: 12),
+                                    Expanded(
+                                      child: Text(
+                                        product['name']! as String,
+                                        maxLines: 2,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: const TextStyle(
+                                          color: Color(0xff203f36),
+                                          fontWeight: FontWeight.w800,
+                                          height: 1.25,
+                                        ),
+                                      ),
+                                    ),
+                                    Text(
+                                      product['sku']?.toString().isNotEmpty ==
+                                              true
+                                          ? product['sku']! as String
+                                          : 'No SKU',
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: const TextStyle(
+                                          color: Color(0xff8a9b95),
+                                          fontSize: 10.5),
+                                    ),
+                                    const SizedBox(height: 8),
+                                    Row(children: [
+                                      Expanded(
+                                        child: Text(
+                                          'PHP ${(product['selling_price'] as num).toStringAsFixed(2)}',
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: const TextStyle(
+                                            color: Color(0xff126d50),
+                                            fontSize: 15,
+                                            fontWeight: FontWeight.w800,
+                                          ),
+                                        ),
+                                      ),
+                                      Container(
+                                        width: 34,
+                                        height: 34,
+                                        alignment: Alignment.center,
+                                        decoration: BoxDecoration(
+                                          color: const Color(0xff0e8a60),
+                                          borderRadius:
+                                              BorderRadius.circular(11),
+                                        ),
+                                        child: const Icon(LucideIcons.plus,
+                                            color: Colors.white, size: 17),
+                                      ),
+                                    ]),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                  PaginationControls(
+                    page: _catalogPage,
+                    hasNext: hasNext,
+                    onPrevious: _catalogPage == 0
+                        ? null
+                        : () => setState(() => _catalogPage--),
+                    onNext:
+                        hasNext ? () => setState(() => _catalogPage++) : null,
+                  ),
+                ],
+              );
+            },
+          ),
         ),
-      ),
-    ]);
+      ]),
+    );
   }
 
   Widget _cart({bool sheet = false}) {
     if (sheet) {
       return SafeArea(
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+          padding: const EdgeInsets.fromLTRB(16, 6, 16, 12),
           child: Column(children: [
             Container(
-                width: 40,
-                height: 4,
-                margin: const EdgeInsets.only(bottom: 10),
-                decoration: const BoxDecoration(
-                    color: Color(0xffdfe9e1),
-                    borderRadius: BorderRadius.all(Radius.circular(3)))),
+              width: 42,
+              height: 4,
+              margin: const EdgeInsets.only(bottom: 12),
+              decoration: BoxDecoration(
+                color: const Color(0xffcfddd7),
+                borderRadius: BorderRadius.circular(99),
+              ),
+            ),
             Expanded(child: _cartColumn()),
           ]),
         ),
       );
     }
-    return Card(
-      margin: EdgeInsets.zero,
-      clipBehavior: Clip.antiAlias,
-      child: Padding(padding: const EdgeInsets.all(16), child: _cartColumn()),
+    return Container(
+      padding: const EdgeInsets.all(17),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(28),
+        border: Border.all(color: const Color(0xffdfeae5)),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x14153f33),
+            blurRadius: 28,
+            offset: Offset(0, 12),
+          ),
+        ],
+      ),
+      child: _cartColumn(),
     );
   }
 
@@ -1078,175 +1588,278 @@ class _PosScreenState extends State<PosScreen> {
         0, (sum, item) => sum + (item['quantity'] as num).toDouble());
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
       Row(children: [
-        const Icon(LucideIcons.shoppingCart,
-            size: 19, color: Color(0xff16803d)),
-        const SizedBox(width: 8),
-        Text('Current sale',
-            style: Theme.of(context)
-                .textTheme
-                .titleMedium
-                ?.copyWith(fontWeight: FontWeight.w800)),
-        const Spacer(),
+        Container(
+          width: 42,
+          height: 42,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: const Color(0xffe4f7ef),
+            borderRadius: BorderRadius.circular(14),
+          ),
+          child: const Icon(LucideIcons.shoppingCart,
+              size: 20, color: Color(0xff0e8a60)),
+        ),
+        const SizedBox(width: 11),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Order summary',
+                style: TextStyle(
+                  color: Color(0xff173f34),
+                  fontSize: 17,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              Text(
+                cart.isEmpty
+                    ? 'Waiting for the first item'
+                    : '${itemCount.toStringAsFixed(itemCount % 1 == 0 ? 0 : 1)} items in this order',
+                style:
+                    const TextStyle(color: Color(0xff788b84), fontSize: 11.5),
+              ),
+            ],
+          ),
+        ),
         IconButton(
           onPressed: cart.isEmpty ? null : _holdCurrentSale,
           tooltip: 'Hold current sale',
-          visualDensity: VisualDensity.compact,
-          icon: const Icon(LucideIcons.pause, size: 18),
+          style: IconButton.styleFrom(
+            backgroundColor: const Color(0xfffff4db),
+            foregroundColor: const Color(0xff9d6508),
+          ),
+          icon: const Icon(LucideIcons.pause, size: 17),
         ),
         IconButton(
           onPressed: _showHeldSales,
           tooltip: 'View held sales',
-          visualDensity: VisualDensity.compact,
-          icon: const Icon(LucideIcons.history, size: 18),
-        ),
-        const SizedBox(width: 4),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-          decoration: const BoxDecoration(
-              color: Color(0xffe9f5ec),
-              borderRadius: BorderRadius.all(Radius.circular(6))),
-          child: Text(
-              '${itemCount.toStringAsFixed(itemCount % 1 == 0 ? 0 : 1)} items',
-              style: const TextStyle(
-                  color: Color(0xff146c34),
-                  fontSize: 12,
-                  fontWeight: FontWeight.w700)),
+          style: IconButton.styleFrom(
+            backgroundColor: const Color(0xffedf4f1),
+            foregroundColor: const Color(0xff426e61),
+          ),
+          icon: const Icon(LucideIcons.history, size: 17),
         ),
       ]),
-      const SizedBox(height: 14),
-      const _SoftDivider(),
-      const SizedBox(height: 4),
+      const SizedBox(height: 12),
       Expanded(
         child: cart.isEmpty
             ? const _EmptyCart()
             : ListView.separated(
-                padding: const EdgeInsets.symmetric(vertical: 8),
+                padding: const EdgeInsets.symmetric(vertical: 4),
                 itemCount: cart.length,
-                separatorBuilder: (_, __) => const _SoftDivider(),
+                separatorBuilder: (_, __) => const SizedBox(height: 8),
                 itemBuilder: (_, index) {
                   final item = cart[index];
-                  return Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 10),
-                    child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.center,
-                        children: [
-                          Expanded(
-                            child: Column(
+                  final quantity = item['quantity'] as num;
+                  return Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: const Color(0xfff8fbf9),
+                      borderRadius: BorderRadius.circular(17),
+                      border: Border.all(color: const Color(0xffe4ece8)),
+                    ),
+                    child: Column(
+                      children: [
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Expanded(
+                              child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Text(item['product_name']! as String,
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: const TextStyle(
-                                          fontWeight: FontWeight.w700)),
+                                  Text(
+                                    item['product_name']! as String,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                      color: Color(0xff24473c),
+                                      fontWeight: FontWeight.w800,
+                                    ),
+                                  ),
                                   const SizedBox(height: 3),
                                   Text(
-                                      'PHP ${(item['unit_price'] as num).toStringAsFixed(2)} each',
-                                      style: Theme.of(context)
-                                          .textTheme
-                                          .bodySmall),
-                                ]),
-                          ),
-                          const SizedBox(width: 8),
-                          _QuantityButton(
+                                    'PHP ${(item['unit_price'] as num).toStringAsFixed(2)} each',
+                                    style: const TextStyle(
+                                      color: Color(0xff81918c),
+                                      fontSize: 11,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            Text(
+                              'PHP ${(item['line_total'] as num).toStringAsFixed(2)}',
+                              style: const TextStyle(
+                                color: Color(0xff126d50),
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 10),
+                        Row(
+                          children: [
+                            _QuantityButton(
                               icon: LucideIcons.minus,
                               tooltip: 'Remove one',
-                              onPressed: () => _changeQuantity(index, -1)),
-                          InkWell(
+                              onPressed: () => _changeQuantity(index, -1),
+                            ),
+                            InkWell(
                               onTap: () => _editQuantity(index),
-                              borderRadius: BorderRadius.circular(6),
-                              child: SizedBox(
-                                  width: 36,
-                                  height: 30,
-                                  child: Center(
-                                      child: Text(
-                                          (item['quantity'] as num)
-                                              .toStringAsFixed(
-                                                  (item['quantity'] as num) %
-                                                              1 ==
-                                                          0
-                                                      ? 0
-                                                      : 1),
-                                          textAlign: TextAlign.center,
-                                          style: const TextStyle(
-                                              fontWeight: FontWeight.w700,
-                                              decoration:
-                                                  TextDecoration.underline,
-                                              decorationStyle:
-                                                  TextDecorationStyle
-                                                      .dotted))))),
-                          _QuantityButton(
+                              borderRadius: BorderRadius.circular(10),
+                              child: Container(
+                                constraints: const BoxConstraints(minWidth: 42),
+                                height: 32,
+                                alignment: Alignment.center,
+                                margin:
+                                    const EdgeInsets.symmetric(horizontal: 4),
+                                padding:
+                                    const EdgeInsets.symmetric(horizontal: 8),
+                                decoration: BoxDecoration(
+                                  color: Colors.white,
+                                  borderRadius: BorderRadius.circular(10),
+                                  border: Border.all(
+                                      color: const Color(0xffdce8e3)),
+                                ),
+                                child: Text(
+                                  quantity.toStringAsFixed(
+                                      quantity % 1 == 0 ? 0 : 1),
+                                  style: const TextStyle(
+                                    color: Color(0xff315c4f),
+                                    fontWeight: FontWeight.w800,
+                                  ),
+                                ),
+                              ),
+                            ),
+                            _QuantityButton(
                               icon: LucideIcons.plus,
                               tooltip: 'Add one',
-                              onPressed: () => _changeQuantity(index, 1)),
-                          const SizedBox(width: 8),
-                          SizedBox(
-                              width: 74,
-                              child: Text(
-                                  'PHP ${(item['line_total'] as num).toStringAsFixed(2)}',
-                                  textAlign: TextAlign.right,
-                                  style: const TextStyle(
-                                      fontWeight: FontWeight.w800))),
-                        ]),
+                              onPressed: () => _changeQuantity(index, 1),
+                            ),
+                            const Spacer(),
+                            const Text(
+                              'Tap quantity to edit',
+                              style: TextStyle(
+                                color: Color(0xff8a9b95),
+                                fontSize: 9.5,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
                   );
                 },
               ),
       ),
-      const _SoftDivider(),
-      const SizedBox(height: 12),
-      if (cart.isNotEmpty)
+      const SizedBox(height: 10),
+      if (cart.isNotEmpty) ...[
         Row(children: [
           Expanded(
-              child: TextButton.icon(
-                  onPressed: () => _setDiscount(grossTotal),
-                  icon: const Icon(LucideIcons.tag, size: 17),
-                  label: Text(discount > 0
-                      ? 'Discount PHP ${discount.toStringAsFixed(2)}'
-                      : 'Add discount'))),
-          if (discount > 0)
+            child: OutlinedButton.icon(
+              style: OutlinedButton.styleFrom(
+                foregroundColor: const Color(0xff426e61),
+                side: const BorderSide(color: Color(0xffd4e4dd)),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(13)),
+              ),
+              onPressed: () => _setDiscount(grossTotal),
+              icon: const Icon(LucideIcons.tag, size: 16),
+              label: Text(discount > 0
+                  ? 'Discount: PHP ${discount.toStringAsFixed(2)}'
+                  : 'Add order discount'),
+            ),
+          ),
+          if (discount > 0) ...[
+            const SizedBox(width: 6),
             IconButton(
-                onPressed: () {
-                  setState(() {
-                    _saleDiscount = 0;
-                    _saleDiscountReason = null;
-                  });
-                  _rebuildCartSheet();
-                },
-                tooltip: 'Remove discount',
-                icon: const Icon(LucideIcons.x, size: 18))
+              onPressed: () {
+                setState(() {
+                  _saleDiscount = 0;
+                  _saleDiscountReason = null;
+                });
+                _rebuildCartSheet();
+              },
+              tooltip: 'Remove discount',
+              icon: const Icon(LucideIcons.x, size: 18),
+            ),
+          ],
         ]),
+        const SizedBox(height: 10),
+      ],
       Container(
-        padding: const EdgeInsets.all(12),
-        decoration: const BoxDecoration(
-            color: Color(0xffeff8f1),
-            borderRadius: BorderRadius.all(Radius.circular(6))),
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [Color(0xff173f38), Color(0xff0d7457)],
+          ),
+          borderRadius: BorderRadius.circular(20),
+        ),
         child: Row(children: [
-          Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text('Total',
-                style: Theme.of(context)
-                    .textTheme
-                    .titleMedium
-                    ?.copyWith(fontWeight: FontWeight.w700)),
-            if (discount > 0)
-              Text(
-                  'PHP ${grossTotal.toStringAsFixed(2)} before discount${_saleDiscountReason == null ? '' : '  |  $_saleDiscountReason'}',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context).textTheme.bodySmall)
-          ]),
-          const Spacer(),
-          Text('PHP ${total.toStringAsFixed(2)}',
-              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                  color: const Color(0xff146c34), fontWeight: FontWeight.w800)),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'AMOUNT DUE',
+                  style: TextStyle(
+                    color: Color(0xffb8ded0),
+                    fontSize: 10,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 1.1,
+                  ),
+                ),
+                if (discount > 0) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    'PHP ${grossTotal.toStringAsFixed(2)} before discount${_saleDiscountReason == null ? '' : ' • $_saleDiscountReason'}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: Color(0xffd2e9e0),
+                      fontSize: 10.5,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          const SizedBox(width: 10),
+          Text(
+            'PHP ${total.toStringAsFixed(2)}',
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 23,
+              fontWeight: FontWeight.w800,
+              letterSpacing: -.5,
+            ),
+          ),
         ]),
       ),
-      const SizedBox(height: 12),
+      const SizedBox(height: 10),
       SizedBox(
-        height: 48,
+        height: 54,
         child: FilledButton.icon(
+          style: FilledButton.styleFrom(
+            backgroundColor: const Color(0xffffc53d),
+            foregroundColor: const Color(0xff463100),
+            disabledBackgroundColor: const Color(0xffffe8ad),
+            disabledForegroundColor: const Color(0xff9a8551),
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(17)),
+          ),
           onPressed: cart.isEmpty ? null : () => _checkout(total),
           icon: const Icon(LucideIcons.creditCard, size: 19),
-          label: const Text('Proceed to payment'),
+          label: Text(
+            cart.isEmpty
+                ? 'Add an item to continue'
+                : 'Charge PHP ${total.toStringAsFixed(2)}',
+            style: const TextStyle(fontWeight: FontWeight.w800),
+          ),
         ),
       ),
     ]);
@@ -1261,90 +1874,142 @@ class _PosScreenState extends State<PosScreen> {
         0, (sum, item) => sum + (item['quantity'] as num).toDouble());
     final empty = cart.isEmpty;
     return Material(
-      color: Theme.of(context).colorScheme.surface,
-      elevation: 12,
+      color: Colors.transparent,
       child: SafeArea(
         top: false,
-        child: InkWell(
-          onTap: empty ? null : _openCartSheet,
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(16, 10, 12, 10),
-            child: Row(children: [
-              Stack(clipBehavior: Clip.none, children: [
-                Container(
-                  width: 42,
-                  height: 42,
-                  alignment: Alignment.center,
-                  decoration: BoxDecoration(
-                      color: empty
-                          ? const Color(0xffeef2ef)
-                          : const Color(0xffe9f5ec),
-                      borderRadius: const BorderRadius.all(Radius.circular(8))),
-                  child: Icon(LucideIcons.shoppingCart,
-                      size: 20,
-                      color: empty
-                          ? const Color(0xff7d9181)
-                          : const Color(0xff16803d)),
-                ),
-                if (!empty)
-                  Positioned(
-                    top: -4,
-                    right: -4,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 6, vertical: 2),
-                      constraints: const BoxConstraints(minWidth: 20),
+        child: Container(
+          margin: const EdgeInsets.fromLTRB(10, 5, 10, 8),
+          decoration: BoxDecoration(
+            color: empty ? Colors.white : const Color(0xff173f38),
+            borderRadius: BorderRadius.circular(22),
+            border: Border.all(
+              color: empty ? const Color(0xffdce8e2) : const Color(0xff285d52),
+            ),
+            boxShadow: const [
+              BoxShadow(
+                color: Color(0x2915372f),
+                blurRadius: 24,
+                offset: Offset(0, 9),
+              ),
+            ],
+          ),
+          child: Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: empty ? null : _openCartSheet,
+              borderRadius: BorderRadius.circular(22),
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(12, 10, 9, 10),
+                child: Row(children: [
+                  Stack(clipBehavior: Clip.none, children: [
+                    Container(
+                      width: 44,
+                      height: 44,
                       alignment: Alignment.center,
-                      decoration: const BoxDecoration(
-                          color: Color(0xff16803d),
-                          borderRadius: BorderRadius.all(Radius.circular(10))),
-                      child: Text(
-                          itemCount.toStringAsFixed(itemCount % 1 == 0 ? 0 : 1),
-                          style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 11,
-                              fontWeight: FontWeight.w800)),
+                      decoration: BoxDecoration(
+                        color: empty
+                            ? const Color(0xffeef5f1)
+                            : const Color(0xff2b5f54),
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      child: Icon(
+                        LucideIcons.shoppingCart,
+                        size: 20,
+                        color: empty
+                            ? const Color(0xff668078)
+                            : const Color(0xffffcf55),
+                      ),
+                    ),
+                    if (!empty)
+                      Positioned(
+                        top: -5,
+                        right: -5,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 6, vertical: 2),
+                          constraints: const BoxConstraints(minWidth: 20),
+                          alignment: Alignment.center,
+                          decoration: BoxDecoration(
+                            color: const Color(0xffffc53d),
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(
+                                color: const Color(0xff173f38), width: 1.5),
+                          ),
+                          child: Text(
+                            itemCount
+                                .toStringAsFixed(itemCount % 1 == 0 ? 0 : 1),
+                            style: const TextStyle(
+                              color: Color(0xff493400),
+                              fontSize: 10.5,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                        ),
+                      ),
+                  ]),
+                  const SizedBox(width: 11),
+                  Expanded(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          empty
+                              ? 'Your cart is ready'
+                              : 'PHP ${total.toStringAsFixed(2)}',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color:
+                                empty ? const Color(0xff264b40) : Colors.white,
+                            fontSize: empty ? 13 : 18,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          empty
+                              ? 'Tap a product to begin'
+                              : 'Review order and take payment',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color: empty
+                                ? const Color(0xff7c9089)
+                                : const Color(0xffb9d8cf),
+                            fontSize: 10.5,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-              ]),
-              const SizedBox(width: 12),
-              Expanded(
-                child: empty
-                    ? Column(
-                        mainAxisSize: MainAxisSize.min,
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                            const Text('Cart is empty',
-                                style: TextStyle(fontWeight: FontWeight.w700)),
-                            Text('Tap a product to start a sale',
-                                style: Theme.of(context).textTheme.bodySmall),
-                          ])
-                    : Column(
-                        mainAxisSize: MainAxisSize.min,
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                            Text('PHP ${total.toStringAsFixed(2)}',
-                                style: const TextStyle(
-                                    fontWeight: FontWeight.w800,
-                                    fontSize: 18,
-                                    color: Color(0xff146c34))),
-                            Text('Tap to review and pay',
-                                style: Theme.of(context).textTheme.bodySmall),
-                          ]),
+                  IconButton(
+                    onPressed: _showHeldSales,
+                    tooltip: 'Held sales',
+                    color: empty
+                        ? const Color(0xff4e7167)
+                        : const Color(0xffd2e8e1),
+                    icon: const Icon(LucideIcons.history, size: 19),
+                  ),
+                  if (!empty)
+                    FilledButton(
+                      style: FilledButton.styleFrom(
+                        backgroundColor: const Color(0xffffc53d),
+                        foregroundColor: const Color(0xff493400),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 13, vertical: 12),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(13)),
+                      ),
+                      onPressed: _openCartSheet,
+                      child: const Text(
+                        'Review',
+                        style: TextStyle(fontWeight: FontWeight.w800),
+                      ),
+                    ),
+                ]),
               ),
-              const SizedBox(width: 8),
-              IconButton(
-                onPressed: _showHeldSales,
-                tooltip: 'Held sales',
-                icon: const Icon(LucideIcons.history),
-              ),
-              if (!empty)
-                FilledButton.icon(
-                  onPressed: _openCartSheet,
-                  icon: const Icon(LucideIcons.creditCard, size: 18),
-                  label: const Text('View cart'),
-                ),
-            ]),
+            ),
           ),
         ),
       ),
@@ -1438,11 +2103,40 @@ class _PosScreenState extends State<PosScreen> {
   }
 
   Future<void> _openCameraScanner() async {
-    final barcode = await Navigator.of(context).push<String>(
-      MaterialPageRoute(builder: (_) => const BarcodeScannerScreen()),
+    // The scanner stays open and keeps ringing items up, so a whole basket can
+    // be scanned in one pass instead of reopening the camera per item.
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute(
+          builder: (_) => BarcodeScannerScreen(onBarcode: _scanIntoCart)),
     );
-    if (!mounted || barcode == null) return;
-    await _addScannedProduct(barcode);
+    if (mounted) queryController.clear();
+  }
+
+  /// Adds a camera-scanned barcode to the cart and describes what happened so
+  /// the scanner can show it without closing.
+  Future<ScanFeedback> _scanIntoCart(String barcode) async {
+    final product = await widget.database.findByBarcodeOrSku(barcode);
+    if (product == null) {
+      return ScanFeedback(
+          key: barcode,
+          found: false,
+          label: barcode,
+          detail: 'No product uses this barcode');
+    }
+    _addToCart(product);
+    final id = product['id']! as String;
+    final quantity = cart
+        .where((item) => item['product_id'] == id)
+        .fold<double>(0, (total, item) => total + (item['quantity'] as num));
+    final price = (product['selling_price'] as num).toDouble();
+    return ScanFeedback(
+      // Keyed by product, so a second scan of the same item updates that row.
+      key: id,
+      found: true,
+      label: product['name']! as String,
+      detail: 'PHP ${price.toStringAsFixed(2)}  •  '
+          '${quantity == quantity.roundToDouble() ? quantity.toInt() : quantity} in cart',
+    );
   }
 
   void _changeQuantity(int index, int change) {
@@ -1871,223 +2565,510 @@ class _PosScreenState extends State<PosScreen> {
           final remaining = total - allocated;
           final hasCredit = method == 'credit' ||
               payments.any((payment) => payment['method'] == 'credit');
-          return SafeArea(
-            child: SingleChildScrollView(
-              padding: EdgeInsets.fromLTRB(16, 12, 16,
-                  MediaQuery.viewInsetsOf(sheetContext).bottom + 16),
-              child: Column(mainAxisSize: MainAxisSize.min, children: [
-                Text('Take payment',
-                    style: Theme.of(sheetContext)
-                        .textTheme
-                        .titleLarge
-                        ?.copyWith(fontWeight: FontWeight.w800)),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: receiptName,
-                  textCapitalization: TextCapitalization.words,
-                  decoration: const InputDecoration(
-                    labelText: 'Receipt name (optional)',
-                    hintText: 'Customer or company name',
-                    prefixIcon: Icon(LucideIcons.userRound),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: SegmentedButton<String>(
-                    segments: const [
-                      ButtonSegment(value: 'cash', label: Text('Cash')),
-                      ButtonSegment(value: 'card', label: Text('Card')),
-                      ButtonSegment(value: 'gcash', label: Text('GCash')),
-                      ButtonSegment(value: 'maya', label: Text('Maya')),
-                      ButtonSegment(value: 'credit', label: Text('Utang')),
-                    ],
-                    selected: {method},
-                    onSelectionChanged: (value) => setSheetState(() {
-                      method = value.first;
-                      if (!splitPayment) amount.text = total.toStringAsFixed(2);
-                    }),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                SwitchListTile(
-                    contentPadding: EdgeInsets.zero,
-                    title: const Text('Split payment'),
-                    value: splitPayment,
-                    onChanged: (value) => setSheetState(() {
-                          splitPayment = value;
-                          payments.clear();
-                          amount.text = total.toStringAsFixed(2);
-                        })),
-                TextField(
-                    controller: amount,
-                    enabled: splitPayment || method == 'cash',
-                    keyboardType:
-                        const TextInputType.numberWithOptions(decimal: true),
-                    decoration: InputDecoration(
-                        labelText: splitPayment
-                            ? 'Amount for this payment'
-                            : method == 'credit'
-                                ? 'Credit amount'
-                                : 'Amount received',
-                        border: const OutlineInputBorder())),
-                const SizedBox(height: 12),
-                if (hasCredit) ...[
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                        color: const Color(0xfff1f7f2),
-                        border: Border.all(color: const Color(0xffcce2d0)),
-                        borderRadius:
-                            const BorderRadius.all(Radius.circular(6))),
-                    child: Column(children: [
-                      Row(children: [
-                        const Icon(LucideIcons.handCoins,
-                            size: 18, color: Color(0xff16803d)),
-                        const SizedBox(width: 8),
-                        Text('Credit customer',
-                            style: Theme.of(sheetContext)
-                                .textTheme
-                                .titleSmall
-                                ?.copyWith(fontWeight: FontWeight.w800)),
-                      ]),
-                      const SizedBox(height: 10),
-                      TextField(
-                          controller: creditCustomer,
-                          textCapitalization: TextCapitalization.words,
-                          decoration: const InputDecoration(
-                              labelText: 'Customer name',
-                              prefixIcon: Icon(LucideIcons.userRound))),
-                      const SizedBox(height: 10),
-                      TextField(
-                          controller: creditContact,
-                          keyboardType: TextInputType.phone,
-                          decoration: const InputDecoration(
-                              labelText: 'Contact (optional)',
-                              prefixIcon: Icon(LucideIcons.phone))),
-                      const SizedBox(height: 10),
-                      SizedBox(
-                        width: double.infinity,
-                        child: OutlinedButton.icon(
-                          onPressed: () async {
-                            final selected = await showDatePicker(
-                                context: sheetContext,
-                                firstDate: DateTime.now(),
-                                lastDate: DateTime.now()
-                                    .add(const Duration(days: 3650)),
-                                initialDate: creditDueAt ?? DateTime.now());
-                            if (selected != null) {
-                              setSheetState(() => creditDueAt = selected);
-                            }
-                          },
-                          icon: const Icon(LucideIcons.calendarDays, size: 18),
-                          label: Text(creditDueAt == null
-                              ? 'Set due date (optional)'
-                              : 'Due ${MaterialLocalizations.of(sheetContext).formatMediumDate(creditDueAt!)}'),
+          final received = double.tryParse(amount.text) ?? 0;
+          final cashOnly = method == 'cash' && !splitPayment;
+          final change = received - total;
+          return Padding(
+            padding: EdgeInsets.only(
+                bottom: MediaQuery.viewInsetsOf(sheetContext).bottom),
+            child: FractionallySizedBox(
+              heightFactor: .9,
+              child: SafeArea(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
+                  child: Column(children: [
+                    Row(children: [
+                      Container(
+                        width: 42,
+                        height: 42,
+                        alignment: Alignment.center,
+                        decoration: BoxDecoration(
+                          color: const Color(0xffe4f7ef),
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                        child: const Icon(LucideIcons.creditCard,
+                            size: 20, color: Color(0xff0e8a60)),
+                      ),
+                      const SizedBox(width: 11),
+                      const Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('Take payment',
+                                style: TextStyle(
+                                  color: Color(0xff173f34),
+                                  fontSize: 17,
+                                  fontWeight: FontWeight.w800,
+                                )),
+                            Text('Choose how the customer pays',
+                                style: TextStyle(
+                                    color: Color(0xff74877f), fontSize: 11.5)),
+                          ],
                         ),
                       ),
-                      const SizedBox(height: 10),
-                      TextField(
-                          controller: creditNote,
-                          decoration: const InputDecoration(
-                              labelText: 'Credit note (optional)',
-                              prefixIcon: Icon(LucideIcons.notebookPen))),
+                      IconButton(
+                        onPressed: () => Navigator.pop(sheetContext),
+                        tooltip: 'Close',
+                        style: IconButton.styleFrom(
+                          backgroundColor: const Color(0xfff0f5f2),
+                          foregroundColor: const Color(0xff37695a),
+                        ),
+                        icon: const Icon(LucideIcons.x, size: 18),
+                      ),
                     ]),
-                  ),
-                  const SizedBox(height: 12),
-                ],
-                if (splitPayment) ...[
-                  SizedBox(
-                      width: double.infinity,
-                      child: OutlinedButton.icon(
-                          onPressed: () {
-                            final value = double.tryParse(amount.text) ?? 0;
-                            if (value <= 0 || value > remaining + .005) {
-                              ScaffoldMessenger.of(sheetContext).showSnackBar(
-                                  const SnackBar(
-                                      content: Text(
-                                          'Enter an amount up to the remaining balance.')));
-                              return;
-                            }
-                            setSheetState(() {
-                              payments.add({'method': method, 'amount': value});
-                              amount.text =
-                                  (remaining - value).toStringAsFixed(2);
-                            });
-                          },
-                          icon: const Icon(LucideIcons.circlePlus, size: 18),
-                          label: const Text('Add payment part'))),
-                  const SizedBox(height: 8),
-                  for (var index = 0; index < payments.length; index++)
-                    ListTile(
-                        contentPadding: EdgeInsets.zero,
-                        title: Text((payments[index]['method']! as String)
-                            .toUpperCase()),
-                        trailing:
-                            Row(mainAxisSize: MainAxisSize.min, children: [
-                          Text(
-                              'PHP ${(payments[index]['amount'] as num).toStringAsFixed(2)}'),
-                          IconButton(
-                              onPressed: () =>
-                                  setSheetState(() => payments.removeAt(index)),
-                              tooltip: 'Remove payment',
-                              icon: const Icon(LucideIcons.x, size: 18))
-                        ])),
-                ],
-                Text(
-                    splitPayment
-                        ? 'Remaining: PHP ${remaining.toStringAsFixed(2)}'
-                        : 'Total: PHP ${total.toStringAsFixed(2)}',
-                    style: Theme.of(sheetContext).textTheme.titleMedium),
-                const SizedBox(height: 16),
-                FilledButton(
-                  onPressed: () {
-                    final received = method == 'cash'
-                        ? double.tryParse(amount.text) ?? 0
-                        : total;
-                    if ((splitPayment && remaining.abs() > .005) ||
-                        (!splitPayment && received < total)) {
-                      ScaffoldMessenger.of(sheetContext).showSnackBar(
-                          const SnackBar(
-                              content: Text(
-                                  'Payment is less than the sale total.')));
-                      return;
-                    }
-                    final completedPayments = splitPayment
-                        ? List<Map<String, Object?>>.from(payments)
-                        : <Map<String, Object?>>[
-                            {'method': method, 'amount': total}
-                          ];
-                    final creditAmount = completedPayments
-                        .where((payment) => payment['method'] == 'credit')
-                        .fold<double>(
-                            0,
-                            (sum, payment) =>
-                                sum + (payment['amount'] as num).toDouble());
-                    if (creditAmount > 0 &&
-                        creditCustomer.text.trim().isEmpty) {
-                      ScaffoldMessenger.of(sheetContext).showSnackBar(
-                          const SnackBar(
-                              content: Text(
-                                  'Customer name is required for Credit / Utang.')));
-                      return;
-                    }
-                    Navigator.pop(sheetContext, {
-                      'payments': completedPayments,
-                      'credit': creditAmount <= 0
-                          ? null
-                          : <String, Object?>{
-                              'customer_name': creditCustomer.text.trim(),
-                              'customer_contact': creditContact.text.trim(),
-                              'amount': creditAmount,
-                              'due_at': creditDueAt?.toUtc().toIso8601String(),
-                              'note': creditNote.text.trim(),
-                            },
-                    });
-                  },
-                  child: const Text('Complete sale'),
+                    const SizedBox(height: 14),
+                    Expanded(
+                      child: ListView(
+                          padding: const EdgeInsets.only(bottom: 4),
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(16),
+                              decoration: BoxDecoration(
+                                gradient: const LinearGradient(
+                                  begin: Alignment.topLeft,
+                                  end: Alignment.bottomRight,
+                                  colors: [
+                                    Color(0xff173f38),
+                                    Color(0xff0d7457)
+                                  ],
+                                ),
+                                borderRadius: BorderRadius.circular(20),
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(children: [
+                                    const Expanded(
+                                      child: Text(
+                                        'AMOUNT DUE',
+                                        style: TextStyle(
+                                          color: Color(0xffb8ded0),
+                                          fontSize: 10,
+                                          fontWeight: FontWeight.w800,
+                                          letterSpacing: 1.1,
+                                        ),
+                                      ),
+                                    ),
+                                    Text(
+                                      'PHP ${total.toStringAsFixed(2)}',
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 23,
+                                        fontWeight: FontWeight.w800,
+                                        letterSpacing: -.5,
+                                      ),
+                                    ),
+                                  ]),
+                                  if (splitPayment ||
+                                      (cashOnly && received > 0)) ...[
+                                    const SizedBox(height: 10),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 11, vertical: 8),
+                                      decoration: BoxDecoration(
+                                        color: const Color(0x1fffffff),
+                                        borderRadius: BorderRadius.circular(12),
+                                      ),
+                                      child: Row(children: [
+                                        Expanded(
+                                          child: Text(
+                                            splitPayment
+                                                ? 'Remaining to allocate'
+                                                : change >= 0
+                                                    ? 'Change due'
+                                                    : 'Still short',
+                                            style: const TextStyle(
+                                              color: Color(0xffd2e9e0),
+                                              fontSize: 11.5,
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                          ),
+                                        ),
+                                        Text(
+                                          'PHP ${(splitPayment ? remaining : change.abs()).toStringAsFixed(2)}',
+                                          style: TextStyle(
+                                            color: !splitPayment && change < 0
+                                                ? const Color(0xffffc9c2)
+                                                : const Color(0xffffd97a),
+                                            fontSize: 14,
+                                            fontWeight: FontWeight.w800,
+                                          ),
+                                        ),
+                                      ]),
+                                    ),
+                                  ],
+                                ],
+                              ),
+                            ),
+                            const SizedBox(height: 16),
+                            const _SheetLabel('PAYMENT METHOD'),
+                            const SizedBox(height: 8),
+                            Wrap(spacing: 8, runSpacing: 8, children: [
+                              for (final option in const [
+                                ('cash', 'Cash', LucideIcons.banknote),
+                                ('card', 'Card', LucideIcons.creditCard),
+                                ('gcash', 'GCash', LucideIcons.smartphone),
+                                ('maya', 'Maya', LucideIcons.wallet),
+                                ('credit', 'Utang', LucideIcons.handCoins),
+                              ])
+                                _MethodPill(
+                                  label: option.$2,
+                                  icon: option.$3,
+                                  selected: method == option.$1,
+                                  onTap: () => setSheetState(() {
+                                    method = option.$1;
+                                    if (!splitPayment) {
+                                      amount.text = total.toStringAsFixed(2);
+                                    }
+                                  }),
+                                ),
+                            ]),
+                            const SizedBox(height: 16),
+                            _SheetLabel(splitPayment
+                                ? 'AMOUNT FOR THIS PART'
+                                : method == 'credit'
+                                    ? 'CREDIT AMOUNT'
+                                    : 'AMOUNT RECEIVED'),
+                            const SizedBox(height: 8),
+                            TextField(
+                              controller: amount,
+                              enabled: splitPayment || method == 'cash',
+                              keyboardType:
+                                  const TextInputType.numberWithOptions(
+                                      decimal: true),
+                              onChanged: (_) => setSheetState(() {}),
+                              style: const TextStyle(
+                                fontSize: 19,
+                                fontWeight: FontWeight.w800,
+                                color: Color(0xff173f34),
+                              ),
+                              decoration: InputDecoration(
+                                filled: true,
+                                fillColor: const Color(0xfff4f8f6),
+                                prefixIcon: const Icon(LucideIcons.banknote,
+                                    size: 20, color: Color(0xff5f7b72)),
+                                prefixText: 'PHP  ',
+                                prefixStyle: const TextStyle(
+                                  color: Color(0xff5f7b72),
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(17),
+                                  borderSide: BorderSide.none,
+                                ),
+                                enabledBorder: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(17),
+                                  borderSide: const BorderSide(
+                                      color: Color(0xffe1ebe6)),
+                                ),
+                                disabledBorder: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(17),
+                                  borderSide: const BorderSide(
+                                      color: Color(0xffe8eeeb)),
+                                ),
+                                focusedBorder: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(17),
+                                  borderSide: const BorderSide(
+                                      color: Color(0xff15a675), width: 1.5),
+                                ),
+                              ),
+                            ),
+                            if (splitPayment || method == 'cash') ...[
+                              const SizedBox(height: 10),
+                              Wrap(spacing: 8, runSpacing: 8, children: [
+                                for (final tender in _tenderSuggestions(
+                                    splitPayment ? remaining : total))
+                                  _TenderChip(
+                                    label: tender.$1,
+                                    onTap: () => setSheetState(() => amount
+                                        .text = tender.$2.toStringAsFixed(2)),
+                                  ),
+                              ]),
+                            ],
+                            const SizedBox(height: 16),
+                            Container(
+                              padding: const EdgeInsets.fromLTRB(14, 4, 8, 4),
+                              decoration: BoxDecoration(
+                                color: const Color(0xfffbfdfc),
+                                borderRadius: BorderRadius.circular(18),
+                                border:
+                                    Border.all(color: const Color(0xffe6eeea)),
+                              ),
+                              child: Row(children: [
+                                const Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text('Split payment',
+                                          style: TextStyle(
+                                            color: Color(0xff203f36),
+                                            fontWeight: FontWeight.w800,
+                                          )),
+                                      SizedBox(height: 2),
+                                      Text('Pay with more than one method',
+                                          style: TextStyle(
+                                              color: Color(0xff81918c),
+                                              fontSize: 11)),
+                                    ],
+                                  ),
+                                ),
+                                Switch(
+                                  value: splitPayment,
+                                  activeThumbColor: Colors.white,
+                                  activeTrackColor: const Color(0xff0e8a60),
+                                  onChanged: (value) => setSheetState(() {
+                                    splitPayment = value;
+                                    payments.clear();
+                                    amount.text = total.toStringAsFixed(2);
+                                  }),
+                                ),
+                              ]),
+                            ),
+                            if (splitPayment) ...[
+                              const SizedBox(height: 10),
+                              SizedBox(
+                                width: double.infinity,
+                                child: OutlinedButton.icon(
+                                  style: OutlinedButton.styleFrom(
+                                    foregroundColor: const Color(0xff426e61),
+                                    side: const BorderSide(
+                                        color: Color(0xffd4e4dd)),
+                                    shape: RoundedRectangleBorder(
+                                        borderRadius:
+                                            BorderRadius.circular(14)),
+                                    padding: const EdgeInsets.symmetric(
+                                        vertical: 13),
+                                  ),
+                                  onPressed: () {
+                                    final value =
+                                        double.tryParse(amount.text) ?? 0;
+                                    if (value <= 0 ||
+                                        value > remaining + .005) {
+                                      ScaffoldMessenger.of(sheetContext)
+                                          .showSnackBar(const SnackBar(
+                                              content: Text(
+                                                  'Enter an amount up to the remaining balance.')));
+                                      return;
+                                    }
+                                    setSheetState(() {
+                                      payments.add(
+                                          {'method': method, 'amount': value});
+                                      amount.text = (remaining - value)
+                                          .toStringAsFixed(2);
+                                    });
+                                  },
+                                  icon: const Icon(LucideIcons.circlePlus,
+                                      size: 18),
+                                  label: const Text('Add payment part'),
+                                ),
+                              ),
+                              for (var index = 0;
+                                  index < payments.length;
+                                  index++) ...[
+                                const SizedBox(height: 8),
+                                _PaymentPartRow(
+                                  method: payments[index]['method']! as String,
+                                  amount: (payments[index]['amount'] as num)
+                                      .toDouble(),
+                                  onRemove: () => setSheetState(
+                                      () => payments.removeAt(index)),
+                                ),
+                              ],
+                            ],
+                            if (hasCredit) ...[
+                              const SizedBox(height: 16),
+                              Container(
+                                padding: const EdgeInsets.all(14),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xfff7fbf9),
+                                  borderRadius: BorderRadius.circular(20),
+                                  border: Border.all(
+                                      color: const Color(0xffe1ebe6)),
+                                ),
+                                child: Column(children: [
+                                  Row(children: [
+                                    Container(
+                                      width: 34,
+                                      height: 34,
+                                      alignment: Alignment.center,
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xfffff4db),
+                                        borderRadius: BorderRadius.circular(12),
+                                      ),
+                                      child: const Icon(LucideIcons.handCoins,
+                                          size: 17, color: Color(0xff9d6508)),
+                                    ),
+                                    const SizedBox(width: 10),
+                                    const Expanded(
+                                      child: Text('Credit customer',
+                                          style: TextStyle(
+                                            color: Color(0xff173f34),
+                                            fontWeight: FontWeight.w800,
+                                          )),
+                                    ),
+                                  ]),
+                                  const SizedBox(height: 12),
+                                  TextField(
+                                      controller: creditCustomer,
+                                      textCapitalization:
+                                          TextCapitalization.words,
+                                      decoration: const InputDecoration(
+                                          labelText: 'Customer name',
+                                          prefixIcon:
+                                              Icon(LucideIcons.userRound))),
+                                  const SizedBox(height: 10),
+                                  TextField(
+                                      controller: creditContact,
+                                      keyboardType: TextInputType.phone,
+                                      decoration: const InputDecoration(
+                                          labelText: 'Contact (optional)',
+                                          prefixIcon: Icon(LucideIcons.phone))),
+                                  const SizedBox(height: 10),
+                                  SizedBox(
+                                    width: double.infinity,
+                                    child: OutlinedButton.icon(
+                                      style: OutlinedButton.styleFrom(
+                                        foregroundColor:
+                                            const Color(0xff426e61),
+                                        side: const BorderSide(
+                                            color: Color(0xffd4e4dd)),
+                                        shape: RoundedRectangleBorder(
+                                            borderRadius:
+                                                BorderRadius.circular(14)),
+                                        padding: const EdgeInsets.symmetric(
+                                            vertical: 13),
+                                      ),
+                                      onPressed: () async {
+                                        final selected = await showDatePicker(
+                                            context: sheetContext,
+                                            firstDate: DateTime.now(),
+                                            lastDate: DateTime.now().add(
+                                                const Duration(days: 3650)),
+                                            initialDate:
+                                                creditDueAt ?? DateTime.now());
+                                        if (selected != null) {
+                                          setSheetState(
+                                              () => creditDueAt = selected);
+                                        }
+                                      },
+                                      icon: const Icon(LucideIcons.calendarDays,
+                                          size: 18),
+                                      label: Text(creditDueAt == null
+                                          ? 'Set due date (optional)'
+                                          : 'Due ${MaterialLocalizations.of(sheetContext).formatMediumDate(creditDueAt!)}'),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 10),
+                                  TextField(
+                                      controller: creditNote,
+                                      decoration: const InputDecoration(
+                                          labelText: 'Credit note (optional)',
+                                          prefixIcon:
+                                              Icon(LucideIcons.notebookPen))),
+                                ]),
+                              ),
+                            ],
+                            const SizedBox(height: 16),
+                            const _SheetLabel('RECEIPT NAME (OPTIONAL)'),
+                            const SizedBox(height: 8),
+                            TextField(
+                              controller: receiptName,
+                              textCapitalization: TextCapitalization.words,
+                              decoration: InputDecoration(
+                                filled: true,
+                                fillColor: const Color(0xfff4f8f6),
+                                hintText: 'Customer or company name',
+                                hintStyle:
+                                    const TextStyle(color: Color(0xff8ca099)),
+                                prefixIcon: const Icon(LucideIcons.userRound,
+                                    size: 20, color: Color(0xff5f7b72)),
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(17),
+                                  borderSide: BorderSide.none,
+                                ),
+                                enabledBorder: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(17),
+                                  borderSide: const BorderSide(
+                                      color: Color(0xffe1ebe6)),
+                                ),
+                                focusedBorder: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(17),
+                                  borderSide: const BorderSide(
+                                      color: Color(0xff15a675), width: 1.5),
+                                ),
+                              ),
+                            ),
+                          ]),
+                    ),
+                    const SizedBox(height: 12),
+                    SizedBox(
+                      height: 54,
+                      child: FilledButton.icon(
+                        style: FilledButton.styleFrom(
+                          backgroundColor: const Color(0xffffc53d),
+                          foregroundColor: const Color(0xff463100),
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(17)),
+                        ),
+                        icon: const Icon(LucideIcons.circleCheck, size: 19),
+                        label: Text(
+                          'Complete sale • PHP ${total.toStringAsFixed(2)}',
+                          style: const TextStyle(fontWeight: FontWeight.w800),
+                        ),
+                        onPressed: () {
+                          final received = method == 'cash'
+                              ? double.tryParse(amount.text) ?? 0
+                              : total;
+                          if ((splitPayment && remaining.abs() > .005) ||
+                              (!splitPayment && received < total)) {
+                            ScaffoldMessenger.of(sheetContext).showSnackBar(
+                                const SnackBar(
+                                    content: Text(
+                                        'Payment is less than the sale total.')));
+                            return;
+                          }
+                          final completedPayments = splitPayment
+                              ? List<Map<String, Object?>>.from(payments)
+                              : <Map<String, Object?>>[
+                                  {'method': method, 'amount': total}
+                                ];
+                          final creditAmount = completedPayments
+                              .where((payment) => payment['method'] == 'credit')
+                              .fold<double>(
+                                  0,
+                                  (sum, payment) =>
+                                      sum +
+                                      (payment['amount'] as num).toDouble());
+                          if (creditAmount > 0 &&
+                              creditCustomer.text.trim().isEmpty) {
+                            ScaffoldMessenger.of(sheetContext).showSnackBar(
+                                const SnackBar(
+                                    content: Text(
+                                        'Customer name is required for Credit / Utang.')));
+                            return;
+                          }
+                          Navigator.pop(sheetContext, {
+                            'payments': completedPayments,
+                            'credit': creditAmount <= 0
+                                ? null
+                                : <String, Object?>{
+                                    'customer_name': creditCustomer.text.trim(),
+                                    'customer_contact':
+                                        creditContact.text.trim(),
+                                    'amount': creditAmount,
+                                    'due_at':
+                                        creditDueAt?.toUtc().toIso8601String(),
+                                    'note': creditNote.text.trim(),
+                                  },
+                          });
+                        },
+                      ),
+                    ),
+                  ]),
                 ),
-              ]),
+              ),
             ),
           );
         },
@@ -2168,43 +3149,88 @@ class _PosScreenState extends State<PosScreen> {
         heightFactor: .88,
         child: SafeArea(
           child: Padding(
-            padding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 14),
             child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   Row(children: [
+                    Container(
+                      width: 42,
+                      height: 42,
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        color: const Color(0xffe4f7ef),
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      child: const Icon(LucideIcons.receiptText,
+                          size: 20, color: Color(0xff0e8a60)),
+                    ),
+                    const SizedBox(width: 11),
                     Expanded(
-                        child: Text('Sale receipt',
-                            style: Theme.of(sheet)
-                                .textTheme
-                                .titleLarge
-                                ?.copyWith(fontWeight: FontWeight.w800))),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text('Sale receipt',
+                              style: TextStyle(
+                                color: Color(0xff173f34),
+                                fontSize: 17,
+                                fontWeight: FontWeight.w800,
+                              )),
+                          Text(receiptNumber,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                  color: Color(0xff74877f), fontSize: 11.5)),
+                        ],
+                      ),
+                    ),
                     IconButton(
-                        onPressed: () => Navigator.pop(sheet),
-                        tooltip: 'Close',
-                        icon: const Icon(LucideIcons.x)),
+                      onPressed: () => Navigator.pop(sheet),
+                      tooltip: 'Close',
+                      style: IconButton.styleFrom(
+                        backgroundColor: const Color(0xfff0f5f2),
+                        foregroundColor: const Color(0xff37695a),
+                      ),
+                      icon: const Icon(LucideIcons.x, size: 18),
+                    ),
                   ]),
-                  const Divider(height: 16),
+                  const SizedBox(height: 12),
                   Expanded(
                     child: SingleChildScrollView(
-                      child: RepaintBoundary(
-                        key: boundaryKey,
-                        child: ReceiptImage(
-                          receiptNumber: receiptNumber,
-                          receiptName: receiptName,
-                          items: items,
-                          payments: payments,
-                          total: total,
-                          discount: discount,
-                          discountReason: discountReason,
-                          profile: profile,
-                          tax: tax,
+                      // A tinted backdrop so the torn paper edges read as paper.
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 10, vertical: 14),
+                        decoration: BoxDecoration(
+                          color: const Color(0xffeef4f1),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: RepaintBoundary(
+                          key: boundaryKey,
+                          child: ReceiptImage(
+                            receiptNumber: receiptNumber,
+                            receiptName: receiptName,
+                            items: items,
+                            payments: payments,
+                            total: total,
+                            discount: discount,
+                            discountReason: discountReason,
+                            profile: profile,
+                            tax: tax,
+                          ),
                         ),
                       ),
                     ),
                   ),
                   const SizedBox(height: 12),
                   OutlinedButton.icon(
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: const Color(0xff426e61),
+                      side: const BorderSide(color: Color(0xffd4e4dd)),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14)),
+                      padding: const EdgeInsets.symmetric(vertical: 13),
+                    ),
                     onPressed: () async {
                       try {
                         final path =

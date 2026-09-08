@@ -81,93 +81,77 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 physics: const AlwaysScrollableScrollPhysics(),
                 padding: EdgeInsets.fromLTRB(hPad, 16, hPad, 20),
                 children: [
-                  Row(children: [
-                    const Icon(LucideIcons.trendingUp, size: 19),
-                    const SizedBox(width: 8),
-                    Flexible(
-                      child: Text('Sales analytics',
-                          style: Theme.of(context).textTheme.titleLarge,
-                          overflow: TextOverflow.ellipsis),
-                    ),
-                    const Spacer(),
-                    Text('Today', style: Theme.of(context).textTheme.bodySmall),
-                  ]),
-                  const SizedBox(height: 14),
+                  const _DashboardHeading(),
+                  const SizedBox(height: 18),
                   LayoutBuilder(builder: (context, constraints) {
-                    const spacing = 10.0;
-                    final columns =
-                        math.max(2, (constraints.maxWidth / 200).floor());
+                    const spacing = 12.0;
+                    final columns = math.max(
+                        2, math.min(4, (constraints.maxWidth / 220).floor()));
                     final cardWidth =
                         (constraints.maxWidth - spacing * (columns - 1)) /
                             columns;
-                    return Wrap(spacing: spacing, runSpacing: spacing, children: [
-                      _MetricCard(
-                          width: cardWidth,
-                          icon: LucideIcons.banknote,
-                          label: 'Net sales',
-                          value: _php(data.summary['net_sales'] ?? 0)),
-                      _MetricCard(
-                          width: cardWidth,
-                          icon: LucideIcons.shoppingCart,
-                          label: 'Transactions',
-                          value: '${data.summary['transaction_count'] ?? 0}'),
-                      _MetricCard(
-                          width: cardWidth,
-                          icon: LucideIcons.undo2,
-                          label: 'Refunds',
-                          value: _php(data.summary['refunds'] ?? 0),
-                          warning: (data.summary['refunds'] ?? 0) > 0),
-                      _MetricCard(
-                          width: cardWidth,
-                          icon: LucideIcons.trendingUp,
-                          label: 'Est. profit',
-                          value: _php(data.summary['estimated_profit'] ?? 0)),
-                      _MetricCard(
-                          width: cardWidth,
-                          icon: LucideIcons.handCoins,
-                          label: 'Outstanding credit',
-                          value: _php(data.finance['outstanding_credit'] ?? 0),
-                          warning:
-                              (data.finance['outstanding_credit'] ?? 0) > 0),
-                      _MetricCard(
-                          width: cardWidth,
-                          icon: LucideIcons.receipt,
-                          label: 'Costs this month',
-                          value: _php(data.finance['month_expenses'] ?? 0),
-                          warning: (data.finance['month_expenses'] ?? 0) > 0),
-                      _MetricCard(
-                          width: cardWidth,
-                          icon: LucideIcons.triangleAlert,
-                          label: 'Low stock',
-                          value: '${data.inventory['low_stock_count'] ?? 0}',
-                          warning:
-                              (data.inventory['low_stock_count'] ?? 0) > 0),
-                    ]);
+                    return Wrap(
+                        spacing: spacing,
+                        runSpacing: spacing,
+                        children: [
+                          _MetricCard(
+                              width: cardWidth,
+                              icon: LucideIcons.banknote,
+                              label: 'Net sales',
+                              value: _php(data.summary['net_sales'] ?? 0)),
+                          _MetricCard(
+                              width: cardWidth,
+                              icon: LucideIcons.shoppingCart,
+                              label: 'Transactions',
+                              value:
+                                  '${data.summary['transaction_count'] ?? 0}'),
+                          _MetricCard(
+                              width: cardWidth,
+                              icon: LucideIcons.undo2,
+                              label: 'Refunds',
+                              value: _php(data.summary['refunds'] ?? 0),
+                              warning: (data.summary['refunds'] ?? 0) > 0),
+                          _MetricCard(
+                              width: cardWidth,
+                              icon: LucideIcons.trendingUp,
+                              label: 'Est. profit',
+                              value:
+                                  _php(data.summary['estimated_profit'] ?? 0)),
+                          _MetricCard(
+                              width: cardWidth,
+                              icon: LucideIcons.handCoins,
+                              label: 'Outstanding credit',
+                              value:
+                                  _php(data.finance['outstanding_credit'] ?? 0),
+                              warning:
+                                  (data.finance['outstanding_credit'] ?? 0) >
+                                      0),
+                          _MetricCard(
+                              width: cardWidth,
+                              icon: LucideIcons.receipt,
+                              label: 'Costs this month',
+                              value: _php(data.finance['month_expenses'] ?? 0),
+                              warning:
+                                  (data.finance['month_expenses'] ?? 0) > 0),
+                          _MetricCard(
+                              width: cardWidth,
+                              icon: LucideIcons.triangleAlert,
+                              label: 'Low stock',
+                              value:
+                                  '${data.inventory['low_stock_count'] ?? 0}',
+                              warning:
+                                  (data.inventory['low_stock_count'] ?? 0) > 0),
+                        ]);
                   }),
-                  const SizedBox(height: 20),
-                  Card(
-                    margin: EdgeInsets.zero,
-                    child: Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text('Sales trend',
-                                style: Theme.of(context)
-                                    .textTheme
-                                    .titleMedium
-                                    ?.copyWith(fontWeight: FontWeight.w800)),
-                            const SizedBox(height: 4),
-                            Text('Last 7 days',
-                                style: Theme.of(context).textTheme.bodySmall),
-                            const SizedBox(height: 16),
-                            SizedBox(
-                                height: 170,
-                                child: _SalesTrendChart(rows: data.trend)),
-                          ]),
-                    ),
+                  const SizedBox(height: 18),
+                  _AnalyticsCard(
+                    icon: LucideIcons.chartNoAxesColumnIncreasing,
+                    title: 'Sales trend',
+                    subtitle: 'Last 7 days',
+                    child: SizedBox(
+                        height: 190, child: _SalesTrendChart(rows: data.trend)),
                   ),
-                  const SizedBox(height: 20),
+                  const SizedBox(height: 18),
                   LayoutBuilder(
                     builder: (context, constraints) {
                       final wide = constraints.maxWidth >= 800;
@@ -180,18 +164,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                   Expanded(child: topProducts),
-                                  const SizedBox(width: 16),
+                                  const SizedBox(width: 12),
                                   Expanded(child: payments),
-                                  const SizedBox(width: 16),
+                                  const SizedBox(width: 12),
                                   Expanded(child: lowStock)
                                 ])
                           : Column(
                               crossAxisAlignment: CrossAxisAlignment.stretch,
                               children: [
                                   topProducts,
-                                  const SizedBox(height: 16),
+                                  const SizedBox(height: 12),
                                   payments,
-                                  const SizedBox(height: 16),
+                                  const SizedBox(height: 12),
                                   lowStock
                                 ]);
                     },
@@ -235,6 +219,74 @@ class _DashboardData {
       );
 }
 
+class _DashboardHeading extends StatelessWidget {
+  const _DashboardHeading();
+
+  @override
+  Widget build(BuildContext context) => Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Container(
+            width: 42,
+            height: 42,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: const Color(0xffe9f5ec),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: const Icon(LucideIcons.trendingUp,
+                size: 20, color: Color(0xff16803d)),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Sales analytics',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context)
+                        .textTheme
+                        .titleLarge
+                        ?.copyWith(fontWeight: FontWeight.w800)),
+                const SizedBox(height: 2),
+                Text('Performance, cash flow and stock health',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.bodySmall),
+              ],
+            ),
+          ),
+          const SizedBox(width: 12),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            decoration: BoxDecoration(
+              color: const Color(0xffedf8f0),
+              borderRadius: BorderRadius.circular(999),
+              border: Border.all(color: const Color(0xffcfe7d6)),
+            ),
+            child: const Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                SizedBox(
+                  width: 7,
+                  height: 7,
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                        color: Color(0xff16803d), shape: BoxShape.circle),
+                  ),
+                ),
+                SizedBox(width: 6),
+                Text('Today',
+                    style:
+                        TextStyle(fontSize: 11, fontWeight: FontWeight.w700)),
+              ],
+            ),
+          ),
+        ],
+      );
+}
+
 class _MetricCard extends StatelessWidget {
   const _MetricCard(
       {required this.icon,
@@ -253,42 +305,54 @@ class _MetricCard extends StatelessWidget {
     final color = warning ? const Color(0xffb45309) : const Color(0xff16803d);
     return SizedBox(
       width: width ?? 190,
-      height: 112,
-      child: Card(
-        margin: EdgeInsets.zero,
+      height: 124,
+      child: Container(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: const Color(0xffdfe9e1)),
+        ),
         child: Padding(
           padding: const EdgeInsets.all(14),
-          child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Container(
-                width: 38,
-                height: 38,
-                alignment: Alignment.center,
-                decoration: BoxDecoration(
-                    color: warning
-                        ? const Color(0xfffff4e5)
-                        : const Color(0xffe9f5ec),
-                    borderRadius: const BorderRadius.all(Radius.circular(8))),
-                child: Icon(icon, size: 19, color: color)),
-            const SizedBox(width: 10),
-            Expanded(
-                child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                  Text(label,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(children: [
+                Container(
+                    width: 34,
+                    height: 34,
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                        color: warning
+                            ? const Color(0xfffff4e5)
+                            : const Color(0xffe9f5ec),
+                        borderRadius: BorderRadius.circular(7)),
+                    child: Icon(icon, size: 17, color: color)),
+                const SizedBox(width: 9),
+                Expanded(
+                  child: Text(label,
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
-                      style: Theme.of(context).textTheme.bodySmall),
-                  const SizedBox(height: 4),
-                  SizedBox(
-                      width: double.infinity,
-                      child: FittedBox(
-                          alignment: Alignment.centerLeft,
-                          fit: BoxFit.scaleDown,
-                          child: Text(value,
-                              style: const TextStyle(
-                                  fontSize: 16, fontWeight: FontWeight.w800))))
-                ])),
-          ]),
+                      style: Theme.of(context)
+                          .textTheme
+                          .bodySmall
+                          ?.copyWith(fontWeight: FontWeight.w600)),
+                ),
+              ]),
+              const Spacer(),
+              SizedBox(
+                width: double.infinity,
+                child: FittedBox(
+                  alignment: Alignment.centerLeft,
+                  fit: BoxFit.scaleDown,
+                  child: Text(value,
+                      maxLines: 1,
+                      style: const TextStyle(
+                          fontSize: 20, fontWeight: FontWeight.w800)),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -321,8 +385,8 @@ class _SalesTrendChart extends StatelessWidget {
         Expanded(
           child: CustomPaint(
             size: Size.infinite,
-            painter: _TrendAreaPainter(
-                amounts, maximum, maximum > 0 ? peak : -1),
+            painter:
+                _TrendAreaPainter(amounts, maximum, maximum > 0 ? peak : -1),
           ),
         ),
         const SizedBox(height: 6),
@@ -413,8 +477,7 @@ class _Slice {
 /// A donut (pie) chart on the left with a coloured legend on the right that
 /// lists each slice's share and amount. The centre shows the running total.
 class _DonutBreakdown extends StatelessWidget {
-  const _DonutBreakdown(
-      {required this.slices, required this.valueFormatter});
+  const _DonutBreakdown({required this.slices, required this.valueFormatter});
   final List<_Slice> slices;
   final String Function(num) valueFormatter;
 
@@ -428,8 +491,7 @@ class _DonutBreakdown extends StatelessWidget {
           width: 116,
           height: 116,
           child: CustomPaint(
-            painter: _DonutPainter(
-                slices.map((slice) => slice.value).toList(),
+            painter: _DonutPainter(slices.map((slice) => slice.value).toList(),
                 slices.map((slice) => slice.color).toList()),
             child: Center(
               child: Column(mainAxisSize: MainAxisSize.min, children: [
@@ -474,8 +536,7 @@ class _DonutBreakdown extends StatelessWidget {
                                           fontWeight: FontWeight.w600))),
                               Text(
                                   '${total <= 0 ? 0 : (slice.value / total * 100).round()}%',
-                                  style:
-                                      Theme.of(context).textTheme.bodySmall),
+                                  style: Theme.of(context).textTheme.bodySmall),
                             ]),
                             Text(valueFormatter(slice.value),
                                 style: const TextStyle(
@@ -533,8 +594,7 @@ class _BarRow extends StatelessWidget {
                 child: Container(
                     height: 8,
                     decoration: BoxDecoration(
-                        color: color,
-                        borderRadius: BorderRadius.circular(4))),
+                        color: color, borderRadius: BorderRadius.circular(4))),
               ),
             ]),
           ),
@@ -713,28 +773,57 @@ class _LowStockCard extends StatelessWidget {
 
 class _AnalyticsCard extends StatelessWidget {
   const _AnalyticsCard(
-      {required this.icon, required this.title, required this.child});
+      {required this.icon,
+      required this.title,
+      required this.child,
+      this.subtitle});
   final IconData icon;
   final String title;
   final Widget child;
+  final String? subtitle;
 
   @override
-  Widget build(BuildContext context) => Card(
-        margin: EdgeInsets.zero,
+  Widget build(BuildContext context) => Container(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: const Color(0xffdfe9e1)),
+        ),
         child: Padding(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.all(18),
           child:
               Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Row(children: [
-              Icon(icon, size: 18, color: const Color(0xff16803d)),
-              const SizedBox(width: 8),
-              Text(title,
-                  style: Theme.of(context)
-                      .textTheme
-                      .titleMedium
-                      ?.copyWith(fontWeight: FontWeight.w800))
+              Container(
+                width: 34,
+                height: 34,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: const Color(0xffe9f5ec),
+                  borderRadius: BorderRadius.circular(7),
+                ),
+                child: Icon(icon, size: 17, color: const Color(0xff16803d)),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(title,
+                        style: Theme.of(context)
+                            .textTheme
+                            .titleMedium
+                            ?.copyWith(fontWeight: FontWeight.w800)),
+                    if (subtitle != null) ...[
+                      const SizedBox(height: 2),
+                      Text(subtitle!,
+                          style: Theme.of(context).textTheme.bodySmall),
+                    ],
+                  ],
+                ),
+              ),
             ]),
-            const SizedBox(height: 14),
+            const SizedBox(height: 16),
             child,
           ]),
         ),

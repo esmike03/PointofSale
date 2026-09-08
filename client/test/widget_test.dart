@@ -73,6 +73,12 @@ void main() {
     await rawDatabase.execute('''CREATE TABLE app_settings (
       key TEXT PRIMARY KEY, value TEXT NOT NULL
     )''');
+    await rawDatabase.execute('''CREATE TABLE cached_credentials (
+      username TEXT PRIMARY KEY, password_salt TEXT NOT NULL,
+      password_hash TEXT NOT NULL, user_name TEXT NOT NULL,
+      user_role TEXT NOT NULL, branch_id TEXT NOT NULL, token TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    )''');
     await rawDatabase.execute('''CREATE TABLE local_users (
       id TEXT PRIMARY KEY, name TEXT NOT NULL, email TEXT,
       username TEXT NOT NULL COLLATE NOCASE UNIQUE,
@@ -651,6 +657,144 @@ void main() {
     expect((await database.saleReceipt('remote-sale'))['items'], hasLength(1));
   });
 
+  test('offline credential verification never returns a stale server token',
+      () async {
+    await database.cacheCredential(
+      username: 'cashier',
+      password: 'password123',
+      userName: 'Cashier',
+      userRole: 'cashier',
+      branchId: 'branch-1',
+      token: 'old-server-token',
+    );
+
+    final cached =
+        await database.verifyCachedCredential('cashier', 'password123');
+
+    expect(cached, isNotNull);
+    expect(cached, isNot(contains('token')));
+    expect(cached?['user_name'], 'Cashier');
+  });
+
+  test('reset app data clears local records and recreates only fresh admin',
+      () async {
+    await database.saveSetting('token', 'server-token');
+    await rawDatabase.insert('products', {
+      'id': 'reset-product',
+      'name': 'Delete Me',
+      'quantity': 4.0,
+    });
+    await rawDatabase.insert('sync_queue', {
+      'operation_id': 'reset-operation',
+      'type': 'product.create',
+      'payload': '{}',
+      'created_at': DateTime.now().toUtc().toIso8601String(),
+    });
+    await database.cacheCredential(
+      username: 'cashier',
+      password: 'password123',
+      userName: 'Cashier',
+      userRole: 'cashier',
+      branchId: 'branch-1',
+      token: 'old-server-token',
+    );
+
+    await database.resetAllData();
+
+    expect(await database.setting('token'), isNull);
+    expect(await rawDatabase.query('products'), isEmpty);
+    expect(await rawDatabase.query('sync_queue'), isEmpty);
+    expect(await rawDatabase.query('cached_credentials'), isEmpty);
+    final localUsers = await rawDatabase.query('local_users');
+    expect(localUsers, hasLength(1));
+    expect(localUsers.single['username'], 'admin');
+  });
+
+  test('product import reports the count and current product', () async {
+    final updates = <(int, int, String)>[];
+
+    final imported = await database.importProducts(
+      [
+        {
+          'name': 'Apple',
+          'sellingPrice': 12.0,
+          'unit': 'piece',
+        },
+        {
+          'name': 'Banana',
+          'sellingPrice': 8.0,
+          'unit': 'piece',
+        },
+        {
+          'name': 'Coffee',
+          'sellingPrice': 25.0,
+          'unit': 'pack',
+        },
+      ],
+      onProgress: (processed, total, currentProduct) =>
+          updates.add((processed, total, currentProduct)),
+    );
+
+    expect(imported, 3);
+    expect(updates, [
+      (1, 3, 'Apple'),
+      (2, 3, 'Banana'),
+      (3, 3, 'Coffee'),
+    ]);
+    expect(await rawDatabase.query('products'), hasLength(3));
+    expect(await rawDatabase.query('sync_queue'), hasLength(3));
+  });
+
+  test('server product reset clears only catalog data once', () async {
+    final now = DateTime.now().toUtc().toIso8601String();
+    await rawDatabase.insert('products', {
+      'id': 'old-product',
+      'name': 'Old Product',
+      'quantity': 5.0,
+    });
+    await rawDatabase.insert('sync_queue', {
+      'operation_id': 'old-product-operation',
+      'type': 'product.create',
+      'payload': '{}',
+      'created_at': now,
+    });
+    await rawDatabase.insert('sync_queue', {
+      'operation_id': 'sale-operation',
+      'type': 'sale.create',
+      'payload': '{}',
+      'created_at': now,
+    });
+
+    await database.applyServerSnapshot({
+      'products_reset_at': now,
+      'products': <Map<String, dynamic>>[],
+    });
+
+    expect(await rawDatabase.query('products'), isEmpty);
+    expect(
+        await rawDatabase.query('sync_queue',
+            where: 'type = ?', whereArgs: ['product.create']),
+        isEmpty);
+    expect(
+        await rawDatabase
+            .query('sync_queue', where: 'type = ?', whereArgs: ['sale.create']),
+        hasLength(1));
+    expect(await database.setting('products_reset_at'), now);
+
+    // Receiving another page from the same reset must not erase products that
+    // were added after the reset boundary.
+    await rawDatabase.insert('products', {
+      'id': 'fresh-product',
+      'name': 'Fresh Product',
+      'quantity': 0.0,
+    });
+    await database.applyServerSnapshot({
+      'products_reset_at': now,
+      'products': <Map<String, dynamic>>[],
+    });
+    expect(await rawDatabase.query('products'), hasLength(1));
+  });
+
   testWidgets('login layout fits a phone and switches connection modes',
       (tester) async {
     tester.view.physicalSize = const Size(390, 844);
@@ -663,7 +807,7 @@ void main() {
     ));
     await tester.pumpAndSettle();
 
-    expect(find.text('Hello, seller!'), findsOneWidget);
+    expect(find.text('Hello, Seller!'), findsOneWidget);
     expect(find.text('Start selling locally'), findsOneWidget);
     expect(find.byType(Image), findsOneWidget);
     expect(tester.takeException(), isNull);

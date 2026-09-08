@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
-import 'app_menu.dart';
 import 'async_dispose.dart';
 import 'data/local/local_database.dart';
 import 'module_fab.dart';
 import 'pagination_controls.dart';
+import 'ui_kit.dart';
 
 const _expenseCategories = [
   'Electricity',
@@ -80,89 +80,110 @@ class _FinanceScreenState extends State<FinanceScreen>
 
   @override
   Widget build(BuildContext context) => Scaffold(
-        appBar: AppBar(
-          leading: AppMenu.leadingOf(context),
-          title: const Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('Finance'),
-              Text('Customer credit and operating costs',
-                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500)),
-            ],
-          ),
+        backgroundColor: kPageTop,
+        appBar: ModuleAppBar(
+          title: 'Finance',
+          subtitle: 'Customer credit and operating costs',
           actions: [
-            IconButton(
-                onPressed: _refreshAll,
-                tooltip: 'Refresh finance',
-                icon: const Icon(LucideIcons.refreshCw)),
-            const SizedBox(width: 8),
+            SoftIconButton(
+              icon: LucideIcons.refreshCw,
+              tooltip: 'Refresh finance',
+              onPressed: _refreshAll,
+            ),
           ],
         ),
-        body: Column(children: [
-          FutureBuilder<Map<String, num>>(
-            future: _summary,
-            builder: (context, snapshot) {
-              final data = snapshot.data ?? const <String, num>{};
-              final hPad = MediaQuery.sizeOf(context).width < 600 ? 12.0 : 20.0;
-              return SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                padding: EdgeInsets.fromLTRB(hPad, 16, hPad, 12),
-                child: Row(children: [
-                  _FinanceMetric(
-                      icon: LucideIcons.handCoins,
-                      label: 'Total credit issued',
-                      value: _php(data['total_credit'] ?? 0)),
-                  const SizedBox(width: 10),
-                  _FinanceMetric(
-                      icon: LucideIcons.clock3,
-                      label: 'Outstanding credit',
-                      value: _php(data['outstanding_credit'] ?? 0),
-                      warning: (data['outstanding_credit'] ?? 0) > 0),
-                  const SizedBox(width: 10),
-                  _FinanceMetric(
-                      icon: LucideIcons.circleCheck,
-                      label: 'Collected credit',
-                      value: _php(data['collected_credit'] ?? 0)),
-                  const SizedBox(width: 10),
-                  _FinanceMetric(
-                      icon: LucideIcons.receipt,
-                      label: 'Expenses this month',
-                      value: _php(data['month_expenses'] ?? 0),
-                      warning: (data['month_expenses'] ?? 0) > 0),
-                  const SizedBox(width: 10),
-                  _FinanceMetric(
-                      icon: LucideIcons.chartNoAxesColumnIncreasing,
-                      label: 'Total operating costs',
-                      value: _php(data['total_expenses'] ?? 0),
-                      warning: (data['total_expenses'] ?? 0) > 0),
-                ]),
-              );
-            },
-          ),
-          TabBar(
-            controller: _tabController,
-            tabs: const [
-              Tab(icon: Icon(LucideIcons.handCoins), text: 'Credits / Utang'),
-              Tab(icon: Icon(LucideIcons.receipt), text: 'Expenses'),
-            ],
-          ),
-          Expanded(
-            child: TabBarView(
-              controller: _tabController,
-              children: [
-                _CreditsTab(
-                    key: _creditsKey,
-                    database: widget.database,
-                    onChanged: _reloadSummary),
-                _ExpensesTab(
-                    key: _expensesKey,
-                    database: widget.database,
-                    onChanged: _reloadSummary),
-              ],
+        body: ModuleBody(
+          child: Column(children: [
+            FutureBuilder<Map<String, num>>(
+              future: _summary,
+              builder: (context, snapshot) {
+                final data = snapshot.data ?? const <String, num>{};
+                final outstanding = data['outstanding_credit'] ?? 0;
+                final tiles = <Widget Function(double width)>[
+                  (width) => StatTile(
+                        width: width,
+                        icon: LucideIcons.circleCheck,
+                        label: 'Collected credit',
+                        value: php(data['collected_credit'] ?? 0),
+                      ),
+                  (width) => StatTile(
+                        width: width,
+                        icon: LucideIcons.receipt,
+                        label: 'Expenses this month',
+                        value: php(data['month_expenses'] ?? 0),
+                        tone: const Color(0xffd08118),
+                      ),
+                  (width) => StatTile(
+                        width: width,
+                        icon: LucideIcons.chartNoAxesColumnIncreasing,
+                        label: 'Total operating costs',
+                        value: php(data['total_expenses'] ?? 0),
+                        tone: const Color(0xffd08118),
+                      ),
+                ];
+                final compact = MediaQuery.sizeOf(context).width < 600;
+                return Column(children: [
+                  HighlightCard(
+                    label: 'OUTSTANDING CREDIT',
+                    value: php(outstanding),
+                    caption:
+                        '${php(data['collected_credit'] ?? 0)} collected  •  ${php(data['total_credit'] ?? 0)} issued',
+                  ),
+                  const SizedBox(height: 10),
+                  // Phones keep the metrics on one scrollable line so the
+                  // credit and expense lists below still get real height.
+                  if (compact)
+                    SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: Row(
+                          children: [
+                        for (final tile in tiles) ...[
+                          tile(172),
+                          const SizedBox(width: 10)
+                        ]
+                      ]..removeLast()),
+                    )
+                  else
+                    StatTileGrid(tiles: tiles),
+                ]);
+              },
             ),
-          ),
-        ]),
+            const SizedBox(height: 12),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: FilterPillBar(children: [
+                FilterPill(
+                  label: 'Credits / Utang',
+                  icon: LucideIcons.handCoins,
+                  selected: _selectedTab == 0,
+                  onTap: () => _tabController.animateTo(0),
+                ),
+                FilterPill(
+                  label: 'Expenses',
+                  icon: LucideIcons.receipt,
+                  selected: _selectedTab == 1,
+                  onTap: () => _tabController.animateTo(1),
+                ),
+              ]),
+            ),
+            const SizedBox(height: 12),
+            Expanded(
+              child: TabBarView(
+                controller: _tabController,
+                children: [
+                  _CreditsTab(
+                      key: _creditsKey,
+                      database: widget.database,
+                      onChanged: _reloadSummary),
+                  _ExpensesTab(
+                      key: _expensesKey,
+                      database: widget.database,
+                      onChanged: _reloadSummary),
+                ],
+              ),
+            ),
+          ]),
+        ),
         floatingActionButton: ModuleFab(
           onPressed: _selectedTab == 0
               ? () => _creditsKey.currentState?._addCredit()
@@ -223,104 +244,93 @@ class _CreditsTabState extends State<_CreditsTab> {
   }
 
   @override
-  Widget build(BuildContext context) {
-    final hPad = MediaQuery.sizeOf(context).width < 600 ? 12.0 : 20.0;
-    return Padding(
-        padding: EdgeInsets.fromLTRB(hPad, 16, hPad, 20),
-        child:
-            Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-          Row(children: [
-            const Icon(LucideIcons.usersRound, size: 19),
-            const SizedBox(width: 8),
-            Expanded(
-                child: Text('Customer credit',
-                    style: Theme.of(context).textTheme.titleLarge)),
-          ]),
-          const SizedBox(height: 14),
-          LayoutBuilder(builder: (context, constraints) {
-            final narrow = constraints.maxWidth < 680;
-            final search = TextField(
+  Widget build(BuildContext context) => ModulePanel(
+        fill: true,
+        icon: LucideIcons.usersRound,
+        title: 'Customer credit',
+        subtitle: 'Track utang and collect balances',
+        child: Expanded(
+          child: Column(children: [
+            ModuleSearchField(
               controller: _search,
+              hint: 'Search customer, contact, or receipt',
               onChanged: (_) => _reload(firstPage: true),
-              decoration: const InputDecoration(
-                  prefixIcon: Icon(LucideIcons.search),
-                  hintText: 'Search customer, contact, or receipt'),
-            );
-            final filter = SegmentedButton<String>(
-              segments: const [
-                ButtonSegment(value: 'all', label: Text('All')),
-                ButtonSegment(value: 'unpaid', label: Text('Unpaid')),
-                ButtonSegment(value: 'paid', label: Text('Paid')),
-              ],
-              selected: {_status},
-              onSelectionChanged: (value) {
-                _status = value.first;
-                _reload(firstPage: true);
-              },
-            );
-            return narrow
-                ? Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                        search,
-                        const SizedBox(height: 10),
-                        SingleChildScrollView(
-                            scrollDirection: Axis.horizontal, child: filter),
-                      ])
-                : Row(children: [
-                    Expanded(child: search),
-                    const SizedBox(width: 12),
-                    filter,
-                  ]);
-          }),
-          const SizedBox(height: 14),
-          Expanded(
-            child: FutureBuilder<_CreditPage>(
-              future: _data,
-              builder: (context, snapshot) {
-                if (snapshot.connectionState != ConnectionState.done) {
-                  return const Center(child: CircularProgressIndicator());
-                }
-                final data = snapshot.data!;
-                if (data.rows.isEmpty) {
-                  return const Center(
-                      child: Text('No credit accounts match this view.'));
-                }
-                return Column(children: [
-                  Expanded(
-                    child: ListView.separated(
-                      padding: const EdgeInsets.only(bottom: 76),
-                      itemCount: data.rows.length,
-                      separatorBuilder: (_, __) => const SizedBox(height: 8),
-                      itemBuilder: (_, index) => _CreditItem(
-                        credit: data.rows[index],
-                        onMarkPaid: () => _markPaid(data.rows[index]),
+            ),
+            const SizedBox(height: 12),
+            FilterPillBar(children: [
+              for (final option in const [
+                ('all', 'All', LucideIcons.handCoins),
+                ('unpaid', 'Unpaid', LucideIcons.clock3),
+                ('paid', 'Paid', LucideIcons.circleCheck),
+              ])
+                FilterPill(
+                  label: option.$2,
+                  icon: option.$3,
+                  selected: _status == option.$1,
+                  onTap: () {
+                    _status = option.$1;
+                    _reload(firstPage: true);
+                  },
+                ),
+            ]),
+            const SizedBox(height: 13),
+            Expanded(
+              child: FutureBuilder<_CreditPage>(
+                future: _data,
+                builder: (context, snapshot) {
+                  if (snapshot.connectionState != ConnectionState.done) {
+                    return const Center(child: CircularProgressIndicator());
+                  }
+                  final data = snapshot.data!;
+                  if (data.rows.isEmpty) {
+                    return ModuleEmpty(
+                      icon: LucideIcons.handCoins,
+                      title: _search.text.isEmpty
+                          ? 'No credit accounts yet'
+                          : 'No credit matches your search',
+                      message: _search.text.isEmpty
+                          ? 'Credit sales and manual balances appear here.'
+                          : 'Try another customer, contact or receipt.',
+                    );
+                  }
+                  return Column(children: [
+                    Expanded(
+                      child: ListView.separated(
+                        padding: const EdgeInsets.only(top: 2, bottom: 76),
+                        itemCount: data.rows.length,
+                        separatorBuilder: (_, __) => const SizedBox(height: 8),
+                        itemBuilder: (_, index) => _CreditItem(
+                          credit: data.rows[index],
+                          onMarkPaid: () => _markPaid(data.rows[index]),
+                        ),
                       ),
                     ),
-                  ),
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: PaginationControls(
-                      page: _page,
-                      hasNext: (_page + 1) * _pageSize < data.total,
-                      onPrevious: _page == 0
-                          ? null
-                          : () {
-                              _page--;
-                              _reload();
-                            },
-                      onNext: () {
-                        _page++;
-                        _reload();
-                      },
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: PaginationControls(
+                        page: _page,
+                        hasNext: (_page + 1) * _pageSize < data.total,
+                        onPrevious: _page == 0
+                            ? null
+                            : () {
+                                _page--;
+                                _reload();
+                              },
+                        onNext: (_page + 1) * _pageSize < data.total
+                            ? () {
+                                _page++;
+                                _reload();
+                              }
+                            : null,
+                      ),
                     ),
-                  ),
-                ]);
-              },
+                  ]);
+                },
+              ),
             ),
-          ),
-        ]));
-  }
+          ]),
+        ),
+      );
 
   Future<void> _addCredit() async {
     final name = TextEditingController();
@@ -335,39 +345,45 @@ class _CreditsTabState extends State<_CreditsTab> {
         builder: (sheetContext, setSheetState) => SafeArea(
           child: SingleChildScrollView(
             padding: EdgeInsets.fromLTRB(
-                20, 12, 20, MediaQuery.viewInsetsOf(sheetContext).bottom + 20),
+                16, 4, 16, MediaQuery.viewInsetsOf(sheetContext).bottom + 16),
             child: Column(mainAxisSize: MainAxisSize.min, children: [
-              _SheetTitle(
-                  icon: LucideIcons.handCoins,
-                  title: 'Add customer credit',
-                  subtitle: 'Record an opening balance not linked to a sale.'),
+              SheetHeader(
+                icon: LucideIcons.handCoins,
+                title: 'Add customer credit',
+                subtitle: 'Record a balance not linked to a sale',
+                onClose: () => Navigator.pop(sheetContext),
+              ),
               const SizedBox(height: 16),
               TextField(
                   controller: name,
                   autofocus: true,
                   textCapitalization: TextCapitalization.words,
-                  decoration: const InputDecoration(
-                      labelText: 'Customer name',
-                      prefixIcon: Icon(LucideIcons.userRound))),
+                  decoration: moduleField(
+                      hint: 'Customer name',
+                      label: 'Customer name',
+                      icon: LucideIcons.userRound)),
               const SizedBox(height: 10),
               TextField(
                   controller: contact,
                   keyboardType: TextInputType.phone,
-                  decoration: const InputDecoration(
-                      labelText: 'Contact (optional)',
-                      prefixIcon: Icon(LucideIcons.phone))),
+                  decoration: moduleField(
+                      hint: 'Mobile number',
+                      label: 'Contact (optional)',
+                      icon: LucideIcons.phone)),
               const SizedBox(height: 10),
               TextField(
                   controller: amount,
                   keyboardType:
                       const TextInputType.numberWithOptions(decimal: true),
-                  decoration: const InputDecoration(
-                      labelText: 'Credit amount',
-                      prefixIcon: Icon(LucideIcons.philippinePeso))),
+                  decoration: moduleField(
+                      hint: '0.00',
+                      label: 'Credit amount',
+                      icon: LucideIcons.philippinePeso)),
               const SizedBox(height: 10),
               SizedBox(
                 width: double.infinity,
                 child: OutlinedButton.icon(
+                  style: softButton(),
                   onPressed: () async {
                     final selected = await showDatePicker(
                         context: sheetContext,
@@ -389,13 +405,16 @@ class _CreditsTabState extends State<_CreditsTab> {
               TextField(
                   controller: note,
                   maxLines: 2,
-                  decoration: const InputDecoration(
-                      labelText: 'Note (optional)',
-                      prefixIcon: Icon(LucideIcons.notebookPen))),
+                  decoration: moduleField(
+                      hint: 'Anything worth remembering',
+                      label: 'Note (optional)',
+                      icon: LucideIcons.notebookPen)),
               const SizedBox(height: 16),
               SizedBox(
                 width: double.infinity,
+                height: 52,
                 child: FilledButton.icon(
+                  style: accentButton(),
                   onPressed: () async {
                     final value = double.tryParse(amount.text) ?? 0;
                     if (name.text.trim().isEmpty || value <= 0) {
@@ -436,19 +455,22 @@ class _CreditsTabState extends State<_CreditsTab> {
       builder: (sheetContext) => SafeArea(
         child: Padding(
           padding: EdgeInsets.fromLTRB(
-              20, 12, 20, MediaQuery.viewInsetsOf(sheetContext).bottom + 20),
+              16, 4, 16, MediaQuery.viewInsetsOf(sheetContext).bottom + 16),
           child: Column(mainAxisSize: MainAxisSize.min, children: [
-            _SheetTitle(
-                icon: LucideIcons.circleCheck,
-                title: 'Mark credit paid',
-                subtitle:
-                    '${credit['customer_name']} will pay ${_php(credit['balance'] as num)}.'),
+            SheetHeader(
+              icon: LucideIcons.circleCheck,
+              title: 'Mark credit paid',
+              subtitle:
+                  '${credit['customer_name']} pays ${php(credit['balance'] as num)}',
+              onClose: () => Navigator.pop(sheetContext),
+            ),
             const SizedBox(height: 16),
             DropdownButtonFormField<String>(
               initialValue: method,
-              decoration: const InputDecoration(
-                  labelText: 'Payment method',
-                  prefixIcon: Icon(LucideIcons.walletCards)),
+              decoration: moduleField(
+                  hint: 'Payment method',
+                  label: 'Payment method',
+                  icon: LucideIcons.walletCards),
               items: _paymentMethods.entries
                   .map((entry) => DropdownMenuItem(
                       value: entry.key, child: Text(entry.value)))
@@ -460,13 +482,16 @@ class _CreditsTabState extends State<_CreditsTab> {
             const SizedBox(height: 10),
             TextField(
                 controller: note,
-                decoration: const InputDecoration(
-                    labelText: 'Payment note (optional)',
-                    prefixIcon: Icon(LucideIcons.notebookPen))),
+                decoration: moduleField(
+                    hint: 'Reference or remark',
+                    label: 'Payment note (optional)',
+                    icon: LucideIcons.notebookPen)),
             const SizedBox(height: 16),
             SizedBox(
               width: double.infinity,
+              height: 52,
               child: FilledButton.icon(
+                style: accentButton(),
                 onPressed: () => Navigator.pop(sheetContext, true),
                 icon: const Icon(LucideIcons.circleCheck, size: 18),
                 label: const Text('Mark paid'),
@@ -540,31 +565,24 @@ class _ExpensesTabState extends State<_ExpensesTab> {
   }
 
   @override
-  Widget build(BuildContext context) {
-    final hPad = MediaQuery.sizeOf(context).width < 600 ? 12.0 : 20.0;
-    return Padding(
-        padding: EdgeInsets.fromLTRB(hPad, 16, hPad, 20),
-        child:
-            Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-          Row(children: [
-            const Icon(LucideIcons.receipt, size: 19),
-            const SizedBox(width: 8),
-            Expanded(
-                child: Text('Operating expenses',
-                    style: Theme.of(context).textTheme.titleLarge)),
-          ]),
-          const SizedBox(height: 14),
-          LayoutBuilder(builder: (context, constraints) {
-            final narrow = constraints.maxWidth < 680;
-            final search = TextField(
-                controller: _search,
-                onChanged: (_) => _reload(firstPage: true),
-                decoration: const InputDecoration(
-                    prefixIcon: Icon(LucideIcons.search),
-                    hintText: 'Search description, vendor, or note'));
-            final category = DropdownButtonFormField<String>(
+  Widget build(BuildContext context) => ModulePanel(
+        fill: true,
+        icon: LucideIcons.receipt,
+        title: 'Operating expenses',
+        subtitle: 'Utilities, supplies, services and more',
+        child: Expanded(
+          child: Column(children: [
+            ModuleSearchField(
+              controller: _search,
+              hint: 'Search description, vendor, or note',
+              onChanged: (_) => _reload(firstPage: true),
+            ),
+            const SizedBox(height: 12),
+            DropdownButtonFormField<String>(
               initialValue: _category,
-              decoration: const InputDecoration(labelText: 'Category'),
+              isExpanded: true,
+              decoration:
+                  moduleField(hint: 'All categories', icon: LucideIcons.tags),
               items: [
                 const DropdownMenuItem(
                     value: 'all', child: Text('All categories')),
@@ -576,65 +594,63 @@ class _ExpensesTabState extends State<_ExpensesTab> {
                 _category = value;
                 _reload(firstPage: true);
               },
-            );
-            return narrow
-                ? Column(children: [
-                    search,
-                    const SizedBox(height: 10),
-                    category,
-                  ])
-                : Row(children: [
-                    Expanded(child: search),
-                    const SizedBox(width: 12),
-                    SizedBox(width: 230, child: category),
-                  ]);
-          }),
-          const SizedBox(height: 14),
-          Expanded(
-            child: FutureBuilder<_ExpensePage>(
-              future: _data,
-              builder: (context, snapshot) {
-                if (snapshot.connectionState != ConnectionState.done) {
-                  return const Center(child: CircularProgressIndicator());
-                }
-                final data = snapshot.data!;
-                if (data.rows.isEmpty) {
-                  return const Center(
-                      child: Text('No expenses match this view.'));
-                }
-                return Column(children: [
-                  Expanded(
-                    child: ListView.separated(
-                      padding: const EdgeInsets.only(bottom: 76),
-                      itemCount: data.rows.length,
-                      separatorBuilder: (_, __) => const SizedBox(height: 8),
-                      itemBuilder: (_, index) =>
-                          _ExpenseItem(expense: data.rows[index]),
-                    ),
-                  ),
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: PaginationControls(
-                      page: _page,
-                      hasNext: (_page + 1) * _pageSize < data.total,
-                      onPrevious: _page == 0
-                          ? null
-                          : () {
-                              _page--;
-                              _reload();
-                            },
-                      onNext: () {
-                        _page++;
-                        _reload();
-                      },
-                    ),
-                  ),
-                ]);
-              },
             ),
-          ),
-        ]));
-  }
+            const SizedBox(height: 13),
+            Expanded(
+              child: FutureBuilder<_ExpensePage>(
+                future: _data,
+                builder: (context, snapshot) {
+                  if (snapshot.connectionState != ConnectionState.done) {
+                    return const Center(child: CircularProgressIndicator());
+                  }
+                  final data = snapshot.data!;
+                  if (data.rows.isEmpty) {
+                    return ModuleEmpty(
+                      icon: LucideIcons.receipt,
+                      title: _search.text.isEmpty && _category == 'all'
+                          ? 'No expenses recorded'
+                          : 'No expenses match this view',
+                      message: _search.text.isEmpty && _category == 'all'
+                          ? 'Track utilities, rent and supplies here.'
+                          : 'Try another search or category.',
+                    );
+                  }
+                  return Column(children: [
+                    Expanded(
+                      child: ListView.separated(
+                        padding: const EdgeInsets.only(top: 2, bottom: 76),
+                        itemCount: data.rows.length,
+                        separatorBuilder: (_, __) => const SizedBox(height: 8),
+                        itemBuilder: (_, index) =>
+                            _ExpenseItem(expense: data.rows[index]),
+                      ),
+                    ),
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: PaginationControls(
+                        page: _page,
+                        hasNext: (_page + 1) * _pageSize < data.total,
+                        onPrevious: _page == 0
+                            ? null
+                            : () {
+                                _page--;
+                                _reload();
+                              },
+                        onNext: (_page + 1) * _pageSize < data.total
+                            ? () {
+                                _page++;
+                                _reload();
+                              }
+                            : null,
+                      ),
+                    ),
+                  ]);
+                },
+              ),
+            ),
+          ]),
+        ),
+      );
 
   Future<void> _addExpense() async {
     final description = TextEditingController();
@@ -651,20 +667,22 @@ class _ExpensesTabState extends State<_ExpensesTab> {
         builder: (sheetContext, setSheetState) => SafeArea(
           child: SingleChildScrollView(
             padding: EdgeInsets.fromLTRB(
-                20, 12, 20, MediaQuery.viewInsetsOf(sheetContext).bottom + 20),
+                16, 4, 16, MediaQuery.viewInsetsOf(sheetContext).bottom + 16),
             child: Column(mainAxisSize: MainAxisSize.min, children: [
-              const _SheetTitle(
-                  icon: LucideIcons.receipt,
-                  title: 'Add operating expense',
-                  subtitle:
-                      'Track utilities, transport, services, and other costs.'),
+              SheetHeader(
+                icon: LucideIcons.receipt,
+                title: 'Add operating expense',
+                subtitle: 'Utilities, transport, services and other costs',
+                onClose: () => Navigator.pop(sheetContext),
+              ),
               const SizedBox(height: 16),
               DropdownButtonFormField<String>(
                 initialValue: null,
-                decoration: const InputDecoration(
-                    labelText: 'Expense category',
-                    prefixIcon: Icon(LucideIcons.tags)),
-                hint: const Text('Select a category'),
+                isExpanded: true,
+                decoration: moduleField(
+                    hint: 'Select a category',
+                    label: 'Expense category',
+                    icon: LucideIcons.tags),
                 items: _expenseCategories
                     .map((value) =>
                         DropdownMenuItem(value: value, child: Text(value)))
@@ -676,24 +694,27 @@ class _ExpensesTabState extends State<_ExpensesTab> {
                   controller: description,
                   autofocus: true,
                   textCapitalization: TextCapitalization.sentences,
-                  decoration: const InputDecoration(
-                      labelText: 'Description',
-                      hintText: 'Example: Monthly electric bill',
-                      prefixIcon: Icon(LucideIcons.fileText))),
+                  decoration: moduleField(
+                      hint: 'Example: Monthly electric bill',
+                      label: 'Description',
+                      icon: LucideIcons.fileText)),
               const SizedBox(height: 10),
               TextField(
                   controller: amount,
                   keyboardType:
                       const TextInputType.numberWithOptions(decimal: true),
-                  decoration: const InputDecoration(
-                      labelText: 'Amount',
-                      prefixIcon: Icon(LucideIcons.philippinePeso))),
+                  decoration: moduleField(
+                      hint: '0.00',
+                      label: 'Amount',
+                      icon: LucideIcons.philippinePeso)),
               const SizedBox(height: 10),
               DropdownButtonFormField<String>(
                 initialValue: method,
-                decoration: const InputDecoration(
-                    labelText: 'Payment method',
-                    prefixIcon: Icon(LucideIcons.walletCards)),
+                isExpanded: true,
+                decoration: moduleField(
+                    hint: 'Payment method',
+                    label: 'Payment method',
+                    icon: LucideIcons.walletCards),
                 items: _paymentMethods.entries
                     .map((entry) => DropdownMenuItem(
                         value: entry.key, child: Text(entry.value)))
@@ -706,13 +727,15 @@ class _ExpensesTabState extends State<_ExpensesTab> {
               TextField(
                   controller: vendor,
                   textCapitalization: TextCapitalization.words,
-                  decoration: const InputDecoration(
-                      labelText: 'Vendor or payee (optional)',
-                      prefixIcon: Icon(LucideIcons.building2))),
+                  decoration: moduleField(
+                      hint: 'Who was paid',
+                      label: 'Vendor or payee (optional)',
+                      icon: LucideIcons.building2)),
               const SizedBox(height: 10),
               SizedBox(
                 width: double.infinity,
                 child: OutlinedButton.icon(
+                  style: softButton(),
                   onPressed: () async {
                     final selected = await showDatePicker(
                         context: sheetContext,
@@ -731,13 +754,16 @@ class _ExpensesTabState extends State<_ExpensesTab> {
               TextField(
                   controller: note,
                   maxLines: 2,
-                  decoration: const InputDecoration(
-                      labelText: 'Note (optional)',
-                      prefixIcon: Icon(LucideIcons.notebookPen))),
+                  decoration: moduleField(
+                      hint: 'Anything worth remembering',
+                      label: 'Note (optional)',
+                      icon: LucideIcons.notebookPen)),
               const SizedBox(height: 16),
               SizedBox(
                 width: double.infinity,
+                height: 52,
                 child: FilledButton.icon(
+                  style: accentButton(),
                   onPressed: () async {
                     final value = double.tryParse(amount.text) ?? 0;
                     if (category == null ||
@@ -785,70 +811,127 @@ class _CreditItem extends StatelessWidget {
     final paid = credit['status'] == 'paid';
     final due = _tryDate(credit['due_at']);
     final overdue = !paid && due != null && due.isBefore(DateTime.now());
-    return Card(
-      margin: EdgeInsets.zero,
-      child: Padding(
-        padding: const EdgeInsets.all(14),
-        child: LayoutBuilder(builder: (context, constraints) {
-          final narrow = constraints.maxWidth < 620;
-          final details =
-              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Row(children: [
-              Flexible(
-                  child: Text(credit['customer_name']! as String,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(fontWeight: FontWeight.w800))),
-              const SizedBox(width: 8),
-              _StatusChip(paid: paid, overdue: overdue),
-            ]),
-            const SizedBox(height: 5),
-            Text(
-                [
-                  if ((credit['customer_contact'] as String?)?.isNotEmpty ==
-                      true)
-                    credit['customer_contact'],
-                  if ((credit['receipt_number'] as String?)?.isNotEmpty == true)
-                    credit['receipt_number'],
-                  if (due != null) 'Due ${_date(due)}',
-                ].join('  |  '),
-                style: Theme.of(context).textTheme.bodySmall),
-            if ((credit['note'] as String?)?.isNotEmpty == true) ...[
-              const SizedBox(height: 4),
-              Text(credit['note']! as String,
-                  maxLines: 2, overflow: TextOverflow.ellipsis),
-            ],
-          ]);
-          final amount = Column(
-              crossAxisAlignment:
-                  narrow ? CrossAxisAlignment.start : CrossAxisAlignment.end,
+    final name = credit['customer_name']! as String;
+    final meta = [
+      if ((credit['customer_contact'] as String?)?.isNotEmpty == true)
+        credit['customer_contact'],
+      if ((credit['receipt_number'] as String?)?.isNotEmpty == true)
+        credit['receipt_number'],
+      if (due != null) 'Due ${_date(due)}',
+    ].join('  •  ');
+    return ModuleRow(
+      child: Column(children: [
+        Row(children: [
+          RowIcon(
+            icon: LucideIcons.userRound,
+            color: paid
+                ? kAccent
+                : overdue
+                    ? const Color(0xffd05b6f)
+                    : const Color(0xffd08118),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Balance', style: Theme.of(context).textTheme.bodySmall),
-                _MoneyText(value: credit['balance']! as num, warning: !paid),
-                Text('of ${_php(credit['original_amount']! as num)}',
-                    style: Theme.of(context).textTheme.bodySmall),
-                if (!paid) ...[
-                  const SizedBox(height: 8),
-                  FilledButton.icon(
-                      onPressed: onMarkPaid,
-                      icon: const Icon(LucideIcons.circleCheck, size: 17),
-                      label: const Text('Mark paid')),
+                Text(
+                  name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                      color: kInkStrong, fontWeight: FontWeight.w800),
+                ),
+                if (meta.isNotEmpty) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    meta,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(color: kInkSoft, fontSize: 11.5),
+                  ),
                 ],
-              ]);
-          return narrow
-              ? Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                      details,
-                      const Divider(height: 22),
-                      amount,
-                    ])
-              : Row(children: [
-                  Expanded(child: details),
-                  const SizedBox(width: 16),
-                  amount,
-                ]);
-        }),
-      ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 116),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Text(
+                  php(credit['balance']! as num),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.right,
+                  style: TextStyle(
+                    color: paid ? kMoney : kWarning,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  'of ${php(credit['original_amount']! as num)}',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.right,
+                  style: const TextStyle(color: kInkSoft, fontSize: 10.5),
+                ),
+              ],
+            ),
+          ),
+        ]),
+        if ((credit['note'] as String?)?.isNotEmpty == true) ...[
+          const SizedBox(height: 8),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: Text(
+              credit['note']! as String,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(color: kInkSoft, fontSize: 11.5),
+            ),
+          ),
+        ],
+        const SizedBox(height: 10),
+        Row(children: [
+          StatusBadge(
+            label: paid
+                ? 'Paid'
+                : overdue
+                    ? 'Overdue'
+                    : 'Unpaid',
+            color: paid
+                ? kAccent
+                : overdue
+                    ? kDanger
+                    : kWarning,
+            background: paid
+                ? kAccentSoft
+                : overdue
+                    ? kDangerSoft
+                    : kWarningSoft,
+          ),
+          const Spacer(),
+          if (!paid)
+            FilledButton.icon(
+              style: FilledButton.styleFrom(
+                backgroundColor: kAccent,
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12)),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+                textStyle:
+                    const TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
+              ),
+              onPressed: onMarkPaid,
+              icon: const Icon(LucideIcons.circleCheck, size: 15),
+              label: const Text('Mark paid'),
+            ),
+        ]),
+      ]),
     );
   }
 }
@@ -859,194 +942,78 @@ class _ExpenseItem extends StatelessWidget {
   final Map<String, Object?> expense;
 
   @override
-  Widget build(BuildContext context) => Card(
-        margin: EdgeInsets.zero,
-        child: Padding(
-          padding: const EdgeInsets.all(14),
-          child: Row(children: [
-            Container(
-                width: 40,
-                height: 40,
-                alignment: Alignment.center,
-                decoration: const BoxDecoration(
-                    color: Color(0xfffff4e5),
-                    borderRadius: BorderRadius.all(Radius.circular(6))),
-                child: const Icon(LucideIcons.receipt,
-                    size: 19, color: Color(0xffb45309))),
+  Widget build(BuildContext context) => ModuleRow(
+        child: Column(children: [
+          Row(children: [
+            const RowIcon(icon: LucideIcons.receipt, color: Color(0xffd08118)),
             const SizedBox(width: 12),
             Expanded(
-                child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                  Text(expense['description']! as String,
-                      style: const TextStyle(fontWeight: FontWeight.w800)),
-                  const SizedBox(height: 4),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
                   Text(
-                      [
-                        expense['category'],
-                        _date(_tryDate(expense['expense_date']) ??
-                            DateTime.now()),
-                        _paymentMethods[expense['payment_method']] ??
-                            expense['payment_method'],
-                        if ((expense['vendor'] as String?)?.isNotEmpty == true)
-                          expense['vendor'],
-                      ].join('  |  '),
-                      style: Theme.of(context).textTheme.bodySmall),
-                  if ((expense['note'] as String?)?.isNotEmpty == true) ...[
-                    const SizedBox(height: 4),
-                    Text(expense['note']! as String,
-                        maxLines: 2, overflow: TextOverflow.ellipsis),
-                  ],
-                ])),
-            const SizedBox(width: 12),
-            _MoneyText(value: expense['amount']! as num, warning: true),
-          ]),
-        ),
-      );
-}
-
-class _FinanceMetric extends StatelessWidget {
-  const _FinanceMetric(
-      {required this.icon,
-      required this.label,
-      required this.value,
-      this.warning = false});
-
-  final IconData icon;
-  final String label;
-  final String value;
-  final bool warning;
-
-  @override
-  Widget build(BuildContext context) => SizedBox(
-        width: 208,
-        height: 112,
-        child: Card(
-          margin: EdgeInsets.zero,
-          child: Padding(
-            padding: const EdgeInsets.all(14),
-            child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Container(
-                  width: 38,
-                  height: 38,
-                  alignment: Alignment.center,
-                  decoration: BoxDecoration(
-                      color: warning
-                          ? const Color(0xfffff4e5)
-                          : const Color(0xffe9f5ec),
-                      borderRadius: const BorderRadius.all(Radius.circular(8))),
-                  child: Icon(icon,
-                      size: 19,
-                      color: warning
-                          ? const Color(0xffb45309)
-                          : const Color(0xff16803d))),
-              const SizedBox(width: 10),
-              Expanded(
-                  child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                    Text(label,
-                        maxLines: 2,
+                    expense['description']! as String,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                        color: kInkStrong, fontWeight: FontWeight.w800),
+                  ),
+                  const SizedBox(height: 4),
+                  Row(children: [
+                    Flexible(
+                      child: StatusBadge(
+                        label: expense['category']! as String,
+                        color: kSoftControlInk,
+                        background: const Color(0xffeef4f1),
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    Flexible(
+                      child: Text(
+                        [
+                          _date(_tryDate(expense['expense_date']) ??
+                              DateTime.now()),
+                          _paymentMethods[expense['payment_method']] ??
+                              expense['payment_method'],
+                          if ((expense['vendor'] as String?)?.isNotEmpty ==
+                              true)
+                            expense['vendor'],
+                        ].join('  •  '),
+                        maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: Theme.of(context).textTheme.bodySmall),
-                    const SizedBox(height: 4),
-                    FittedBox(
-                        fit: BoxFit.scaleDown,
-                        alignment: Alignment.centerLeft,
-                        child: Text(value,
-                            style: const TextStyle(
-                                fontSize: 16, fontWeight: FontWeight.w800))),
-                  ])),
-            ]),
-          ),
-        ),
-      );
-}
-
-class _SheetTitle extends StatelessWidget {
-  const _SheetTitle(
-      {required this.icon, required this.title, required this.subtitle});
-
-  final IconData icon;
-  final String title;
-  final String subtitle;
-
-  @override
-  Widget build(BuildContext context) => Row(children: [
-        Container(
-            width: 42,
-            height: 42,
-            alignment: Alignment.center,
-            decoration: const BoxDecoration(
-                color: Color(0xffe9f5ec),
-                borderRadius: BorderRadius.all(Radius.circular(6))),
-            child: Icon(icon, color: const Color(0xff16803d), size: 20)),
-        const SizedBox(width: 12),
-        Expanded(
-            child:
-                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text(title,
-              style: Theme.of(context)
-                  .textTheme
-                  .titleLarge
-                  ?.copyWith(fontWeight: FontWeight.w800)),
-          const SizedBox(height: 2),
-          Text(subtitle, style: Theme.of(context).textTheme.bodySmall),
-        ])),
-      ]);
-}
-
-class _StatusChip extends StatelessWidget {
-  const _StatusChip({required this.paid, required this.overdue});
-
-  final bool paid;
-  final bool overdue;
-
-  @override
-  Widget build(BuildContext context) {
-    final label = paid
-        ? 'Paid'
-        : overdue
-            ? 'Overdue'
-            : 'Unpaid';
-    final color = paid
-        ? const Color(0xff16803d)
-        : overdue
-            ? const Color(0xffb91c1c)
-            : const Color(0xffb45309);
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-          color: color.withValues(alpha: .1),
-          border: Border.all(color: color.withValues(alpha: .35)),
-          borderRadius: const BorderRadius.all(Radius.circular(6))),
-      child: Text(label,
-          style: TextStyle(
-              color: color, fontSize: 11, fontWeight: FontWeight.w800)),
-    );
-  }
-}
-
-class _MoneyText extends StatelessWidget {
-  const _MoneyText({required this.value, this.warning = false});
-
-  final num value;
-  final bool warning;
-
-  @override
-  Widget build(BuildContext context) => ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 180),
-        child: FittedBox(
-          fit: BoxFit.scaleDown,
-          alignment: Alignment.centerRight,
-          child: Text(_php(value),
-              style: TextStyle(
-                  color: warning
-                      ? const Color(0xffb45309)
-                      : const Color(0xff16803d),
-                  fontSize: 17,
-                  fontWeight: FontWeight.w800)),
-        ),
+                        style: const TextStyle(color: kInkSoft, fontSize: 11.5),
+                      ),
+                    ),
+                  ]),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 112),
+              child: Text(
+                php(expense['amount']! as num),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.right,
+                style: const TextStyle(
+                    color: kWarning, fontSize: 15, fontWeight: FontWeight.w800),
+              ),
+            ),
+          ]),
+          if ((expense['note'] as String?)?.isNotEmpty == true) ...[
+            const SizedBox(height: 8),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                expense['note']! as String,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(color: kInkSoft, fontSize: 11.5),
+              ),
+            ),
+          ],
+        ]),
       );
 }
 
@@ -1061,8 +1028,6 @@ class _ExpensePage {
   final List<Map<String, Object?>> rows;
   final int total;
 }
-
-String _php(num value) => 'PHP ${value.toStringAsFixed(2)}';
 
 String _date(DateTime value) =>
     '${value.year.toString().padLeft(4, '0')}-${value.month.toString().padLeft(2, '0')}-${value.day.toString().padLeft(2, '0')}';

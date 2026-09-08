@@ -1,3 +1,19 @@
+# Chirpy POS API
+
+## Initial local server account
+
+After migrating a local database, create the initial business, main branch,
+and server owner account with:
+
+```sh
+php artisan db:seed
+```
+
+The local defaults are username `admin` and password `admin1234`. Override
+the `POS_SEED_*` values in `.env` before seeding shared or production servers.
+The production seeder refuses to create an owner until
+`POS_SEED_OWNER_PASSWORD` is explicitly set.
+
 <p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
 
 <p align="center">

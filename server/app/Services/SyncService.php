@@ -2,21 +2,22 @@
 
 namespace App\Services;
 
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Throwable;
 
 class SyncService
 {
-    public function __construct(private InventoryService $inventory)
-    {
-    }
+    public function __construct(private InventoryService $inventory) {}
 
     public function apply(array $operation, object $user): array
     {
         $existing = DB::table('sync_operations')
             ->where('business_id', $user->business_id)->where('operation_id', $operation['operation_id'])->first();
-        if ($existing?->status === 'processed') return ['operation_id' => $operation['operation_id'], 'status' => 'already_processed'];
+        if ($existing?->status === 'processed') {
+            return ['operation_id' => $operation['operation_id'], 'status' => 'already_processed'];
+        }
 
         // Persist the receipt of the operation outside the business transaction. A failed
         // operation then remains visible to an authorized user and can be retried safely.
@@ -27,7 +28,30 @@ class SyncService
                 'payload' => json_encode($operation['payload']), 'created_at' => now(), 'updated_at' => now(),
             ]);
             $existing = DB::table('sync_operations')->where('business_id', $user->business_id)->where('operation_id', $operation['operation_id'])->first();
-            if ($existing?->status === 'processed') return ['operation_id' => $operation['operation_id'], 'status' => 'already_processed'];
+            if ($existing?->status === 'processed') {
+                return ['operation_id' => $operation['operation_id'], 'status' => 'already_processed'];
+            }
+        }
+
+        // A catalog reset is a server-wide boundary. Product operations made
+        // before that boundary must be acknowledged but ignored, otherwise an
+        // offline device would recreate the deleted catalog on its next sync.
+        if ($this->productOperationPredatesReset($operation, $user)) {
+            DB::table('sync_operations')
+                ->where('business_id', $user->business_id)
+                ->where('operation_id', $operation['operation_id'])
+                ->update([
+                    'status' => 'processed',
+                    'processed_at' => now(),
+                    'error' => null,
+                    'updated_at' => now(),
+                ]);
+
+            return [
+                'operation_id' => $operation['operation_id'],
+                'status' => 'processed',
+                'discarded_after_product_reset' => true,
+            ];
         }
 
         try {
@@ -56,33 +80,49 @@ class SyncService
                 DB::table('sync_operations')->where('business_id', $user->business_id)->where('operation_id', $operation['operation_id'])
                     ->update(['status' => 'processed', 'processed_at' => now(), 'error' => null, 'updated_at' => now()]);
             });
+
             return ['operation_id' => $operation['operation_id'], 'status' => 'processed'];
         } catch (Throwable $exception) {
             DB::table('sync_operations')->where('business_id', $user->business_id)->where('operation_id', $operation['operation_id'])
                 ->update(['status' => 'failed', 'error' => $exception->getMessage(), 'updated_at' => now()]);
+
             return ['operation_id' => $operation['operation_id'], 'status' => 'failed', 'error' => $exception->getMessage()];
         }
     }
 
     private function createSale(array $sale, string $deviceId, object $user): void
     {
-        if (DB::table('sales')->where('id', $sale['id'])->exists()) return;
+        if (DB::table('sales')->where('id', $sale['id'])->exists()) {
+            return;
+        }
         $items = $sale['items'] ?? [];
-        if (empty($items)) throw new \InvalidArgumentException('A sale must include at least one item.');
+        if (empty($items)) {
+            throw new \InvalidArgumentException('A sale must include at least one item.');
+        }
         $gross = collect($items)->sum(fn ($item) => (float) $item['line_total']);
         $discount = (float) ($sale['discount_amount'] ?? 0);
         $net = $gross - $discount;
-        if ($discount < 0 || $discount > $gross || round($gross, 4) !== round((float) $sale['gross_amount'], 4) || round($net, 4) !== round((float) $sale['net_amount'], 4)) throw new \InvalidArgumentException('Sale total does not match its items.');
+        if ($discount < 0 || $discount > $gross || round($gross, 4) !== round((float) $sale['gross_amount'], 4) || round($net, 4) !== round((float) $sale['net_amount'], 4)) {
+            throw new \InvalidArgumentException('Sale total does not match its items.');
+        }
         $paymentTotal = collect($sale['payments'] ?? [])->sum(fn ($payment) => (float) ($payment['amount'] ?? 0));
-        if (abs($paymentTotal - $net) > 0.005) throw new \InvalidArgumentException('Payment total does not match the sale total.');
+        if (abs($paymentTotal - $net) > 0.005) {
+            throw new \InvalidArgumentException('Payment total does not match the sale total.');
+        }
         $creditAmount = collect($sale['payments'] ?? [])->where('method', 'credit')->sum(fn ($payment) => (float) $payment['amount']);
-        if ($creditAmount > 0 && empty($sale['credit'])) throw new \InvalidArgumentException('Customer details are required for a credit sale.');
-        if (! empty($sale['credit']) && abs((float) ($sale['credit']['original_amount'] ?? 0) - $creditAmount) > 0.005) throw new \InvalidArgumentException('Credit amount does not match the credit payment portion.');
+        if ($creditAmount > 0 && empty($sale['credit'])) {
+            throw new \InvalidArgumentException('Customer details are required for a credit sale.');
+        }
+        if (! empty($sale['credit']) && abs((float) ($sale['credit']['original_amount'] ?? 0) - $creditAmount) > 0.005) {
+            throw new \InvalidArgumentException('Credit amount does not match the credit payment portion.');
+        }
 
         $resolvedItems = [];
         foreach ($items as $item) {
             $product = DB::table('products')->where('id', $item['product_id'])->where('business_id', $user->business_id)->first();
-            if (! $product) throw new \InvalidArgumentException('Unknown product in sale.');
+            if (! $product) {
+                throw new \InvalidArgumentException('Unknown product in sale.');
+            }
             $resolvedItems[] = ['item' => $item, 'product' => $product];
         }
         $tax = $this->saleTaxBreakdown($resolvedItems, $gross, $discount, $sale['tax_mode'] ?? 'unregistered', (float) ($sale['vat_rate'] ?? 0));
@@ -120,18 +160,27 @@ class SyncService
 
     private function saleTaxBreakdown(array $resolvedItems, float $gross, float $discount, string $mode, float $vatRate): array
     {
-        if (! in_array($mode, ['unregistered', 'non_vat', 'vat'], true)) throw new \InvalidArgumentException('Invalid tax registration mode.');
-        if ($mode !== 'vat') return ['tax_mode' => $mode, 'vat_rate' => 0, 'vatable_sales' => 0, 'vat_amount' => 0, 'vat_exempt_sales' => 0, 'zero_rated_sales' => 0];
-        if ($vatRate < 0 || $vatRate > 1) throw new \InvalidArgumentException('Invalid VAT rate.');
+        if (! in_array($mode, ['unregistered', 'non_vat', 'vat'], true)) {
+            throw new \InvalidArgumentException('Invalid tax registration mode.');
+        }
+        if ($mode !== 'vat') {
+            return ['tax_mode' => $mode, 'vat_rate' => 0, 'vatable_sales' => 0, 'vat_amount' => 0, 'vat_exempt_sales' => 0, 'zero_rated_sales' => 0];
+        }
+        if ($vatRate < 0 || $vatRate > 1) {
+            throw new \InvalidArgumentException('Invalid VAT rate.');
+        }
         $categories = ['vatable' => 0.0, 'exempt' => 0.0, 'zero_rated' => 0.0];
         foreach ($resolvedItems as $resolved) {
             $category = $resolved['product']->tax_category ?? 'vatable';
-            if (! array_key_exists($category, $categories)) $category = 'vatable';
+            if (! array_key_exists($category, $categories)) {
+                $category = 'vatable';
+            }
             $categories[$category] += (float) $resolved['item']['line_total'];
         }
         $afterDiscount = fn (string $category): float => $gross <= 0 ? 0 : $categories[$category] - ($discount * $categories[$category] / $gross);
         $inclusiveVatable = $afterDiscount('vatable');
         $vatableSales = $inclusiveVatable / (1 + $vatRate);
+
         return [
             'tax_mode' => 'vat', 'vat_rate' => $vatRate,
             'vatable_sales' => round($vatableSales, 4), 'vat_amount' => round($inclusiveVatable - $vatableSales, 4),
@@ -141,13 +190,19 @@ class SyncService
 
     private function createCredit(array $data, string $deviceId, object $user): void
     {
-        if (DB::table('credits')->where('id', $data['id'] ?? null)->exists()) return;
+        if (DB::table('credits')->where('id', $data['id'] ?? null)->exists()) {
+            return;
+        }
         $customerName = trim($data['customer_name'] ?? '');
         $amount = (float) ($data['original_amount'] ?? $data['amount'] ?? 0);
-        if ($customerName === '' || $amount <= 0) throw new \InvalidArgumentException('Customer name and a positive credit amount are required.');
+        if ($customerName === '' || $amount <= 0) {
+            throw new \InvalidArgumentException('Customer name and a positive credit amount are required.');
+        }
         if (! empty($data['sale_id'])) {
             $sale = DB::table('sales')->where('id', $data['sale_id'])->where('business_id', $user->business_id)->first();
-            if (! $sale) throw new \InvalidArgumentException('Credit sale was not found.');
+            if (! $sale) {
+                throw new \InvalidArgumentException('Credit sale was not found.');
+            }
         }
         DB::table('credits')->insert([
             'id' => $data['id'], 'business_id' => $user->business_id, 'branch_id' => $data['branch_id'] ?? $user->branch_id,
@@ -162,14 +217,22 @@ class SyncService
 
     private function recordCreditPayment(array $data, object $user): void
     {
-        if (DB::table('credit_payments')->where('id', $data['id'] ?? null)->exists()) return;
+        if (DB::table('credit_payments')->where('id', $data['id'] ?? null)->exists()) {
+            return;
+        }
         $credit = DB::table('credits')->where('id', $data['credit_id'] ?? null)
             ->where('business_id', $user->business_id)->lockForUpdate()->first();
-        if (! $credit) throw new \InvalidArgumentException('Credit account not found.');
+        if (! $credit) {
+            throw new \InvalidArgumentException('Credit account not found.');
+        }
         $amount = (float) ($data['amount'] ?? 0);
-        if ($amount <= 0 || $amount > (float) $credit->balance + 0.005) throw new \InvalidArgumentException('Invalid credit payment amount.');
+        if ($amount <= 0 || $amount > (float) $credit->balance + 0.005) {
+            throw new \InvalidArgumentException('Invalid credit payment amount.');
+        }
         $method = $data['method'] ?? '';
-        if (! in_array($method, ['cash', 'card', 'gcash', 'maya', 'bank_transfer'], true)) throw new \InvalidArgumentException('Invalid credit payment method.');
+        if (! in_array($method, ['cash', 'card', 'gcash', 'maya', 'bank_transfer'], true)) {
+            throw new \InvalidArgumentException('Invalid credit payment method.');
+        }
         $paidAt = $data['paid_at'] ?? now();
         DB::table('credit_payments')->insert([
             'id' => $data['id'], 'credit_id' => $credit->id, 'amount' => $amount,
@@ -185,13 +248,19 @@ class SyncService
 
     private function createExpense(array $data, string $deviceId, object $user): void
     {
-        if (DB::table('expenses')->where('id', $data['id'] ?? null)->exists()) return;
+        if (DB::table('expenses')->where('id', $data['id'] ?? null)->exists()) {
+            return;
+        }
         $category = trim($data['category'] ?? '');
         $description = trim($data['description'] ?? '');
         $amount = (float) ($data['amount'] ?? 0);
-        if ($category === '' || $description === '' || $amount <= 0) throw new \InvalidArgumentException('Category, description, and a positive expense amount are required.');
+        if ($category === '' || $description === '' || $amount <= 0) {
+            throw new \InvalidArgumentException('Category, description, and a positive expense amount are required.');
+        }
         $method = $data['payment_method'] ?? '';
-        if (! in_array($method, ['cash', 'card', 'gcash', 'maya', 'bank_transfer'], true)) throw new \InvalidArgumentException('Invalid expense payment method.');
+        if (! in_array($method, ['cash', 'card', 'gcash', 'maya', 'bank_transfer'], true)) {
+            throw new \InvalidArgumentException('Invalid expense payment method.');
+        }
         DB::table('expenses')->insert([
             'id' => $data['id'], 'business_id' => $user->business_id, 'branch_id' => $data['branch_id'] ?? $user->branch_id,
             'device_id' => $deviceId, 'user_id' => $user->id, 'category' => $category,
@@ -203,21 +272,31 @@ class SyncService
 
     private function refundSale(array $refund, string $deviceId, object $user): void
     {
-        if (DB::table('refunds')->where('id', $refund['id'])->exists()) return;
+        if (DB::table('refunds')->where('id', $refund['id'])->exists()) {
+            return;
+        }
         if (! $user->hasAnyRole('super_admin', 'admin', 'business_owner', 'store_manager', 'cashier')) {
             throw new \InvalidArgumentException('You are not allowed to issue refunds.');
         }
         $sale = DB::table('sales')->where('id', $refund['sale_id'])->where('business_id', $user->business_id)->lockForUpdate()->first();
-        if (! $sale) throw new \InvalidArgumentException('The original sale was not found.');
-        if (empty($refund['items']) || empty(trim($refund['reason'] ?? ''))) throw new \InvalidArgumentException('Refund items and a reason are required.');
-        if (! in_array($refund['method'] ?? '', ['cash', 'card', 'gcash', 'maya', 'bank_transfer'], true)) throw new \InvalidArgumentException('Invalid refund method.');
+        if (! $sale) {
+            throw new \InvalidArgumentException('The original sale was not found.');
+        }
+        if (empty($refund['items']) || empty(trim($refund['reason'] ?? ''))) {
+            throw new \InvalidArgumentException('Refund items and a reason are required.');
+        }
+        if (! in_array($refund['method'] ?? '', ['cash', 'card', 'gcash', 'maya', 'bank_transfer'], true)) {
+            throw new \InvalidArgumentException('Invalid refund method.');
+        }
 
         $ratio = (float) $sale->gross_amount === 0.0 ? 1.0 : (float) $sale->net_amount / (float) $sale->gross_amount;
         $refundItems = [];
         $amount = 0.0;
         foreach ($refund['items'] as $requested) {
             $saleItem = DB::table('sale_items')->where('sale_id', $sale->id)->where('product_id', $requested['product_id'])->lockForUpdate()->first();
-            if (! $saleItem) throw new \InvalidArgumentException('A selected sale item was not found.');
+            if (! $saleItem) {
+                throw new \InvalidArgumentException('A selected sale item was not found.');
+            }
             $alreadyReturned = (float) DB::table('refund_items')->join('refunds', 'refund_items.refund_id', '=', 'refunds.id')
                 ->where('refunds.sale_id', $sale->id)->where('refund_items.sale_item_id', $saleItem->id)->sum('refund_items.quantity');
             $quantity = (float) ($requested['quantity'] ?? 0);
@@ -230,8 +309,12 @@ class SyncService
         }
         $alreadyRefunded = (float) DB::table('refunds')->where('sale_id', $sale->id)->sum('amount');
         $amount = min(round($amount, 2), round((float) $sale->net_amount - $alreadyRefunded, 2));
-        if ($amount <= 0) throw new \InvalidArgumentException('This sale is already fully refunded.');
-        if (round((float) ($refund['amount'] ?? -1), 2) !== $amount) throw new \InvalidArgumentException('Refund total does not match the returned items.');
+        if ($amount <= 0) {
+            throw new \InvalidArgumentException('This sale is already fully refunded.');
+        }
+        if (round((float) ($refund['amount'] ?? -1), 2) !== $amount) {
+            throw new \InvalidArgumentException('Refund total does not match the returned items.');
+        }
 
         DB::table('refunds')->insert([
             'id' => $refund['id'], 'business_id' => $user->business_id, 'sale_id' => $sale->id,
@@ -260,7 +343,15 @@ class SyncService
 
     private function recordStockReturn(object $sale, array $refund, object $saleItem, float $quantity, string $deviceId, object $user): void
     {
-        if (! $sale->branch_id) return;
+        if (! $sale->branch_id || ! $saleItem->product_id) {
+            return;
+        }
+        // Product resets preserve receipt/refund history but intentionally
+        // remove the live catalog. A later refund remains valid financially;
+        // it simply cannot restock a product that no longer exists.
+        if (! DB::table('products')->where('id', $saleItem->product_id)->where('business_id', $user->business_id)->exists()) {
+            return;
+        }
         $inventory = DB::table('inventory_items')->where('branch_id', $sale->branch_id)->where('product_id', $saleItem->product_id)->lockForUpdate()->first();
         $newQuantity = (float) ($inventory->quantity ?? 0) + $quantity;
         DB::table('inventory_items')->updateOrInsert(
@@ -277,9 +368,15 @@ class SyncService
 
     private function createProduct(array $product, object $user): void
     {
-        if (! $user->hasAnyRole('super_admin', 'admin', 'business_owner', 'store_manager', 'inventory_staff')) throw new \InvalidArgumentException('You are not allowed to manage products.');
-        if (empty($product['id']) || empty($product['name']) || ! isset($product['selling_price'])) throw new \InvalidArgumentException('Invalid product payload.');
-        if (DB::table('products')->where('id', $product['id'])->exists()) return;
+        if (! $user->hasAnyRole('super_admin', 'admin', 'business_owner', 'store_manager', 'inventory_staff')) {
+            throw new \InvalidArgumentException('You are not allowed to manage products.');
+        }
+        if (empty($product['id']) || empty($product['name']) || ! isset($product['selling_price'])) {
+            throw new \InvalidArgumentException('Invalid product payload.');
+        }
+        if (DB::table('products')->where('id', $product['id'])->exists()) {
+            return;
+        }
         DB::table('products')->insert([
             'id' => $product['id'], 'business_id' => $user->business_id, 'sku' => $product['sku'] ?? null,
             'name' => $product['name'], 'selling_price' => $product['selling_price'], 'cost_price' => $product['cost_price'] ?? 0,
@@ -295,10 +392,16 @@ class SyncService
 
     private function updateProduct(array $data, string $deviceId, object $user): void
     {
-        if (! $user->hasAnyRole('super_admin', 'admin', 'business_owner', 'store_manager', 'inventory_staff')) throw new \InvalidArgumentException('You are not allowed to manage products.');
+        if (! $user->hasAnyRole('super_admin', 'admin', 'business_owner', 'store_manager', 'inventory_staff')) {
+            throw new \InvalidArgumentException('You are not allowed to manage products.');
+        }
         $product = DB::table('products')->where('id', $data['id'] ?? null)->where('business_id', $user->business_id)->first();
-        if (! $product) throw new \InvalidArgumentException('Product not found.');
-        if (empty(trim((string) ($data['name'] ?? ''))) || ! isset($data['selling_price'])) throw new \InvalidArgumentException('Invalid product payload.');
+        if (! $product) {
+            throw new \InvalidArgumentException('Product not found.');
+        }
+        if (empty(trim((string) ($data['name'] ?? ''))) || ! isset($data['selling_price'])) {
+            throw new \InvalidArgumentException('Invalid product payload.');
+        }
 
         DB::table('products')->where('id', $product->id)->update([
             'name' => trim($data['name']), 'sku' => $data['sku'] ?? null,
@@ -320,10 +423,16 @@ class SyncService
 
     private function deleteProduct(array $data, string $deviceId, object $user): void
     {
-        if (! $user->hasAnyRole('super_admin', 'admin', 'business_owner', 'store_manager', 'inventory_staff')) throw new \InvalidArgumentException('You are not allowed to manage products.');
+        if (! $user->hasAnyRole('super_admin', 'admin', 'business_owner', 'store_manager', 'inventory_staff')) {
+            throw new \InvalidArgumentException('You are not allowed to manage products.');
+        }
         $product = DB::table('products')->where('id', $data['id'] ?? null)->where('business_id', $user->business_id)->first();
-        if (! $product) throw new \InvalidArgumentException('Product not found.');
-        if ($product->deleted_at === null) throw new \InvalidArgumentException('Archive this product before deleting it.');
+        if (! $product) {
+            throw new \InvalidArgumentException('Product not found.');
+        }
+        if ($product->deleted_at === null) {
+            throw new \InvalidArgumentException('Archive this product before deleting it.');
+        }
 
         $references = [
             'sale_items' => 'completed sales', 'refund_items' => 'returns',
@@ -336,7 +445,9 @@ class SyncService
             }
         }
         $hasStock = DB::table('inventory_items')->where('product_id', $product->id)->where('quantity', '!=', 0)->exists();
-        if ($hasStock) throw new \InvalidArgumentException('This product still has stock and cannot be permanently deleted.');
+        if ($hasStock) {
+            throw new \InvalidArgumentException('This product still has stock and cannot be permanently deleted.');
+        }
 
         DB::table('audit_logs')->insert([
             'id' => (string) Str::uuid(), 'business_id' => $user->business_id, 'user_id' => $user->id,
@@ -350,9 +461,13 @@ class SyncService
 
     private function setProductArchived(array $data, string $deviceId, object $user, bool $archived): void
     {
-        if (! $user->hasAnyRole('super_admin', 'admin', 'business_owner', 'store_manager', 'inventory_staff')) throw new \InvalidArgumentException('You are not allowed to manage products.');
+        if (! $user->hasAnyRole('super_admin', 'admin', 'business_owner', 'store_manager', 'inventory_staff')) {
+            throw new \InvalidArgumentException('You are not allowed to manage products.');
+        }
         $product = DB::table('products')->where('id', $data['id'] ?? null)->where('business_id', $user->business_id)->first();
-        if (! $product) throw new \InvalidArgumentException('Product not found.');
+        if (! $product) {
+            throw new \InvalidArgumentException('Product not found.');
+        }
         DB::table('products')->where('id', $product->id)->update([
             'deleted_at' => $archived ? now() : null,
             'client_updated_at' => $data['updated_at'] ?? now(),
@@ -369,9 +484,15 @@ class SyncService
 
     private function openRegister(array $data, string $deviceId, object $user): void
     {
-        if (DB::table('register_shifts')->where('id', $data['id'])->exists()) return;
-        if ((float) $data['opening_cash'] < 0) throw new \InvalidArgumentException('Opening cash must not be negative.');
-        if (DB::table('register_shifts')->where('business_id', $user->business_id)->where('device_id', $deviceId)->where('status', 'open')->exists()) throw new \InvalidArgumentException('This device already has an open register shift.');
+        if (DB::table('register_shifts')->where('id', $data['id'])->exists()) {
+            return;
+        }
+        if ((float) $data['opening_cash'] < 0) {
+            throw new \InvalidArgumentException('Opening cash must not be negative.');
+        }
+        if (DB::table('register_shifts')->where('business_id', $user->business_id)->where('device_id', $deviceId)->where('status', 'open')->exists()) {
+            throw new \InvalidArgumentException('This device already has an open register shift.');
+        }
         DB::table('register_shifts')->insert([
             'id' => $data['id'], 'business_id' => $user->business_id, 'branch_id' => $user->branch_id,
             'device_id' => $deviceId, 'cashier_id' => $user->id, 'opening_cash' => $data['opening_cash'],
@@ -382,10 +503,16 @@ class SyncService
 
     private function recordCashMovement(array $data, object $user): void
     {
-        if (DB::table('cash_movements')->where('id', $data['id'])->exists()) return;
-        if (! in_array($data['type'] ?? '', ['cash_in', 'cash_out'], true) || (float) ($data['amount'] ?? 0) <= 0) throw new \InvalidArgumentException('Invalid cash movement.');
+        if (DB::table('cash_movements')->where('id', $data['id'])->exists()) {
+            return;
+        }
+        if (! in_array($data['type'] ?? '', ['cash_in', 'cash_out'], true) || (float) ($data['amount'] ?? 0) <= 0) {
+            throw new \InvalidArgumentException('Invalid cash movement.');
+        }
         $shift = DB::table('register_shifts')->where('id', $data['shift_id'])->where('business_id', $user->business_id)->where('status', 'open')->first();
-        if (! $shift) throw new \InvalidArgumentException('Register shift is not open.');
+        if (! $shift) {
+            throw new \InvalidArgumentException('Register shift is not open.');
+        }
         DB::table('cash_movements')->insert([
             'id' => $data['id'], 'register_shift_id' => $shift->id, 'type' => $data['type'],
             'amount' => $data['amount'], 'note' => $data['note'] ?? null, 'occurred_at' => $data['occurred_at'] ?? now(),
@@ -396,7 +523,9 @@ class SyncService
     private function closeRegister(array $data, object $user): void
     {
         $shift = DB::table('register_shifts')->where('id', $data['id'])->where('business_id', $user->business_id)->lockForUpdate()->first();
-        if (! $shift || $shift->status === 'closed') return;
+        if (! $shift || $shift->status === 'closed') {
+            return;
+        }
         $cashSales = (float) DB::table('payments')->join('sales', 'payments.sale_id', '=', 'sales.id')
             ->where('sales.device_id', $shift->device_id)->where('payments.method', 'cash')->where('sales.occurred_at', '>=', $shift->opened_at)->sum('payments.amount');
         $cashRefunds = (float) DB::table('refunds')->where('device_id', $shift->device_id)
@@ -405,7 +534,9 @@ class SyncService
         $cashOut = (float) DB::table('cash_movements')->where('register_shift_id', $shift->id)->where('type', 'cash_out')->sum('amount');
         $expected = (float) $shift->opening_cash + $cashSales + $cashIn - $cashOut - $cashRefunds;
         $actual = (float) $data['actual_cash'];
-        if ($actual < 0) throw new \InvalidArgumentException('Actual cash must not be negative.');
+        if ($actual < 0) {
+            throw new \InvalidArgumentException('Actual cash must not be negative.');
+        }
         DB::table('register_shifts')->where('id', $shift->id)->update([
             'status' => 'closed', 'closed_at' => $data['closed_at'] ?? now(), 'expected_cash' => $expected,
             'actual_cash' => $actual, 'variance' => $actual - $expected, 'note' => $data['note'] ?? $shift->note, 'updated_at' => now(),
@@ -415,7 +546,12 @@ class SyncService
     private function updateSetting(array $data, object $user): void
     {
         $key = trim($data['key'] ?? '');
-        if ($key === '') throw new \InvalidArgumentException('Setting key is required.');
+        if ($key === '') {
+            throw new \InvalidArgumentException('Setting key is required.');
+        }
+        if (str_starts_with($key, 'system.')) {
+            throw new \InvalidArgumentException('Reserved setting key.');
+        }
         $value = (string) ($data['value'] ?? '');
         $existing = DB::table('business_settings')->where('business_id', $user->business_id)->where('key', $key)->first();
         if ($existing) {
@@ -428,13 +564,43 @@ class SyncService
         }
     }
 
+    private function productOperationPredatesReset(array $operation, object $user): bool
+    {
+        if (! str_starts_with($operation['type'], 'product.')) {
+            return false;
+        }
+
+        $resetAt = DB::table('business_settings')
+            ->where('business_id', $user->business_id)
+            ->where('key', 'system.products_reset_at')
+            ->value('value');
+        if (! $resetAt) {
+            return false;
+        }
+
+        $clientUpdatedAt = $operation['payload']['updated_at'] ?? null;
+        if (! $clientUpdatedAt) {
+            return true;
+        }
+
+        try {
+            return Carbon::parse($clientUpdatedAt)->lessThanOrEqualTo(Carbon::parse($resetAt));
+        } catch (Throwable) {
+            return true;
+        }
+    }
+
     private function recordStockSale(object $product, array $item, array $sale, string $deviceId, object $user): void
     {
         $branchId = $sale['branch_id'] ?? $user->branch_id;
-        if (! $branchId) return;
+        if (! $branchId) {
+            return;
+        }
         $inventory = DB::table('inventory_items')->where('branch_id', $branchId)->where('product_id', $product->id)->lockForUpdate()->first();
         $remaining = (float) ($inventory->quantity ?? 0) - (float) $item['quantity'];
-        if ($remaining < 0 && ! $product->allow_negative_stock) throw new \InvalidArgumentException("Insufficient stock for {$product->name}.");
+        if ($remaining < 0 && ! $product->allow_negative_stock) {
+            throw new \InvalidArgumentException("Insufficient stock for {$product->name}.");
+        }
         DB::table('inventory_items')->updateOrInsert(['branch_id' => $branchId, 'product_id' => $product->id], ['id' => $inventory->id ?? (string) Str::uuid(), 'quantity' => $remaining, 'updated_at' => now(), 'created_at' => $inventory->created_at ?? now()]);
         DB::table('stock_movements')->insert(['id' => (string) Str::uuid(), 'business_id' => $user->business_id, 'branch_id' => $branchId, 'product_id' => $product->id, 'device_id' => $deviceId, 'user_id' => $user->id, 'reason' => 'sale', 'quantity_delta' => -1 * (float) $item['quantity'], 'source_type' => 'sale', 'source_id' => $sale['id'], 'occurred_at' => $sale['occurred_at'] ?? now(), 'created_at' => now(), 'updated_at' => now()]);
     }

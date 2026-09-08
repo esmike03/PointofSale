@@ -3,10 +3,10 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Services\AuditService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
-use App\Services\AuditService;
 
 class ProductController extends Controller
 {
@@ -19,6 +19,7 @@ class ProductController extends Controller
                 $q->where('name', 'like', "%{$search}%")->orWhere('sku', 'like', "%{$search}%");
             }))
             ->orderBy('name')->paginate(min($request->integer('per_page', 50), 100));
+
         return response()->json($products);
     }
 
@@ -47,6 +48,7 @@ class ProductController extends Controller
             }
         });
         $audit->record($request->user(), 'product.created', 'product', $id, null, $data);
+
         return response()->json(DB::table('products')->find($id), 201);
     }
 
@@ -60,6 +62,57 @@ class ProductController extends Controller
         return $this->setArchived($request, $productId, false, $audit);
     }
 
+    public function reset(Request $request, AuditService $audit)
+    {
+        abort_unless($request->user()->hasAnyRole('super_admin', 'admin', 'business_owner'), 403, 'Only an owner or administrator can reset the server product catalog.');
+        $request->validate([
+            'confirmation' => ['required', 'in:RESET PRODUCTS'],
+        ]);
+
+        $businessId = $request->user()->business_id;
+        $productCount = DB::table('products')->where('business_id', $businessId)->count();
+        $inventoryCount = DB::table('inventory_items')
+            ->whereIn('product_id', DB::table('products')->select('id')->where('business_id', $businessId))
+            ->count();
+        $resetAt = now();
+
+        DB::transaction(function () use ($request, $audit, $businessId, $productCount, $inventoryCount, $resetAt) {
+            $productIds = DB::table('products')->select('id')->where('business_id', $businessId);
+            DB::table('product_barcodes')->whereIn('product_id', clone $productIds)->delete();
+            DB::table('inventory_items')->whereIn('product_id', clone $productIds)->delete();
+            DB::table('products')->where('business_id', $businessId)->delete();
+
+            $existingReset = DB::table('business_settings')
+                ->where('business_id', $businessId)
+                ->where('key', 'system.products_reset_at')
+                ->first();
+            DB::table('business_settings')->updateOrInsert(
+                ['business_id' => $businessId, 'key' => 'system.products_reset_at'],
+                [
+                    'id' => $existingReset->id ?? (string) Str::uuid(),
+                    'value' => $resetAt->toIso8601String(),
+                    'created_at' => $existingReset->created_at ?? $resetAt,
+                    'updated_at' => $resetAt,
+                ]
+            );
+
+            $audit->record(
+                $request->user(),
+                'products.reset',
+                'business',
+                $businessId,
+                ['product_count' => $productCount, 'inventory_count' => $inventoryCount],
+                ['product_count' => 0, 'inventory_count' => 0, 'reset_at' => $resetAt->toIso8601String()]
+            );
+        });
+
+        return response()->json([
+            'deleted_products' => $productCount,
+            'deleted_inventory_items' => $inventoryCount,
+            'reset_at' => $resetAt->toIso8601String(),
+        ]);
+    }
+
     private function setArchived(Request $request, string $productId, bool $archived, AuditService $audit)
     {
         abort_unless($request->user()->hasAnyRole('super_admin', 'admin', 'business_owner', 'store_manager', 'inventory_staff'), 403, 'You are not allowed to manage products.');
@@ -67,6 +120,7 @@ class ProductController extends Controller
         abort_unless($product, 404, 'Product not found.');
         DB::table('products')->where('id', $productId)->update(['deleted_at' => $archived ? now() : null, 'updated_at' => now()]);
         $audit->record($request->user(), $archived ? 'product.archived' : 'product.restored', 'product', $productId, (array) $product, ['archived' => $archived]);
+
         return response()->json(['id' => $productId, 'archived' => $archived]);
     }
 }
