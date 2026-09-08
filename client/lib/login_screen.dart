@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:uuid/uuid.dart';
@@ -28,11 +30,50 @@ class _LoginScreenState extends State<LoginScreen> {
   bool _loading = false;
   bool _obscurePassword = true;
   String? _error;
+  Timer? _greetingTimer;
+  int _greetingIndex = 0;
+  bool _greetingVisible = true;
 
   @override
   void initState() {
     super.initState();
     _prefill();
+    _scheduleGreeting();
+  }
+
+  void _scheduleGreeting() {
+    _greetingTimer?.cancel();
+    _greetingTimer = Timer(const Duration(milliseconds: 3200), () {
+      if (!mounted) return;
+      setState(() => _greetingVisible = false);
+      _greetingTimer = Timer(const Duration(milliseconds: 650), () {
+        if (!mounted) return;
+        if (_greetingIndex == 1) {
+          _greetingTimer = Timer(const Duration(milliseconds: 3000), () {
+            if (!mounted) return;
+            setState(() {
+              _greetingIndex = 0;
+              _greetingVisible = true;
+            });
+            _scheduleGreeting();
+          });
+        } else {
+          setState(() {
+            _greetingIndex = 1;
+            _greetingVisible = true;
+          });
+          _scheduleGreeting();
+        }
+      });
+    });
+  }
+
+  @override
+  void reassemble() {
+    super.reassemble();
+    _greetingIndex = 0;
+    _greetingVisible = true;
+    _scheduleGreeting();
   }
 
   Future<void> _prefill() async {
@@ -58,6 +99,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   void dispose() {
+    _greetingTimer?.cancel();
     _server.dispose();
     _username.dispose();
     _password.dispose();
@@ -92,12 +134,15 @@ class _LoginScreenState extends State<LoginScreen> {
       result =
           await ApiClient(baseUrl).login(_username.text.trim(), _password.text);
     } on ApiException catch (error) {
-      // Server reachable but rejected the login. This also happens for an
-      // account created offline that hasn't synced yet, so try the local cache
-      // before surfacing the server's reason.
-      final ok = await _offlineSignIn();
-      if (!ok && mounted) setState(() => _error = error.message);
-      if (mounted) setState(() => _loading = false);
+      // The server answered, so this is not an offline login. Falling back to
+      // the cache here would restore the same stale token after invalid
+      // credentials or a server reset, creating an endless 401 sync loop.
+      if (mounted) {
+        setState(() {
+          _error = error.message;
+          _loading = false;
+        });
+      }
       return;
     } catch (_) {
       // Couldn't reach the server: fall back to a cached login if one exists.
@@ -128,6 +173,7 @@ class _LoginScreenState extends State<LoginScreen> {
       await widget.database.saveSetting('server_url', baseUrl.toString());
       await widget.database.saveSetting('deployment_mode', 'hosted');
       await widget.database.saveSetting('token', token);
+      await widget.database.saveSetting('offline_session', '0');
       await widget.database.saveSetting('device_id', deviceId);
       await widget.database.saveSetting('branch_id', branchId);
       await widget.database.saveSetting('user_name', userName);
@@ -171,6 +217,7 @@ class _LoginScreenState extends State<LoginScreen> {
       }
       await widget.database.saveSetting('deployment_mode', 'standalone');
       await widget.database.saveSetting('token', 'local:${account['id']}');
+      await widget.database.saveSetting('offline_session', '0');
       await widget.database.saveSetting('branch_id', 'local');
       await widget.database.saveSetting('user_name', account['user_name']!);
       await widget.database.saveSetting('user_role', account['user_role']!);
@@ -191,7 +238,16 @@ class _LoginScreenState extends State<LoginScreen> {
     if (cached == null) return false;
     await widget.database.saveSetting('server_url', _server.text.trim());
     await widget.database.saveSetting('deployment_mode', 'hosted');
-    await widget.database.saveSetting('token', cached['token']!);
+    // A cached login unlocks local work only. Never present an old bearer token
+    // as a live server session; it may have been revoked or belong to a server
+    // database that was reset.
+    await widget.database
+        .saveSetting('token', 'offline:${_username.text.trim().toLowerCase()}');
+    await widget.database.saveSetting('offline_session', '1');
+    // Signing in offline never reaches device registration, so make sure this
+    // device at least has an id. Sync registers it with the server later.
+    await widget.database.saveSetting('device_id',
+        await widget.database.setting('device_id') ?? const Uuid().v4());
     await widget.database.saveSetting('branch_id', cached['branch_id']!);
     await widget.database.saveSetting('user_name', cached['user_name']!);
     await widget.database.saveSetting('user_role', cached['user_role']!);
@@ -219,7 +275,6 @@ class _LoginScreenState extends State<LoginScreen> {
     required DeploymentMode mode,
     required IconData icon,
     required String title,
-    required String caption,
   }) {
     final selected = _mode == mode;
     return Material(
@@ -263,28 +318,12 @@ class _LoginScreenState extends State<LoginScreen> {
               ),
               const SizedBox(width: 11),
               Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      title,
-                      style: const TextStyle(
-                        color: Color(0xff153c31),
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      caption,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: Color(0xff668078),
-                        fontSize: 11,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ],
+                child: Text(
+                  title,
+                  style: const TextStyle(
+                    color: Color(0xff153c31),
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
               ),
               if (selected)
@@ -302,74 +341,144 @@ class _LoginScreenState extends State<LoginScreen> {
 
   Widget _hero(BuildContext context, {required bool compact}) {
     final imageSize = compact ? 196.0 : 300.0;
+    final heroWidth = compact
+        ? (MediaQuery.sizeOf(context).width - 36).clamp(280.0, 360.0)
+        : 470.0;
+    final greetingWidth = compact ? 140.0 : 176.0;
+    final mascotLeft = (heroWidth - imageSize) / 2;
+    final greetingLeft =
+        (mascotLeft + imageSize * .72).clamp(0.0, heroWidth - greetingWidth);
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 7),
-          decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: .82),
-            borderRadius: BorderRadius.circular(999),
-            border: Border.all(color: Colors.white),
-            boxShadow: const [
-              BoxShadow(
-                color: Color(0x14005765),
-                blurRadius: 18,
-                offset: Offset(0, 6),
-              ),
-            ],
-          ),
-          child: const Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(Icons.auto_awesome_rounded,
-                  color: Color(0xffffaa00), size: 17),
-              SizedBox(width: 7),
-              Text(
-                'CHIRPY POS',
-                style: TextStyle(
-                  color: Color(0xff146f66),
-                  fontSize: 12,
-                  fontWeight: FontWeight.w800,
-                  letterSpacing: 1.3,
-                ),
-              ),
-            ],
-          ),
-        ),
-        SizedBox(height: compact ? 4 : 14),
         SizedBox(
-          width: imageSize,
+          width: heroWidth,
           height: imageSize,
           child: Stack(
-            alignment: Alignment.center,
+            clipBehavior: Clip.none,
             children: [
-              Container(
-                width: imageSize * .73,
-                height: imageSize * .73,
-                decoration: const BoxDecoration(
-                  shape: BoxShape.circle,
-                  gradient: LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [Color(0x65ffffff), Color(0x22ffffff)],
+              Positioned(
+                left: mascotLeft,
+                top: 0,
+                child: SizedBox(
+                  width: imageSize,
+                  height: imageSize,
+                  child: Stack(
+                    alignment: Alignment.center,
+                    children: [
+                      Container(
+                        width: imageSize * .73,
+                        height: imageSize * .73,
+                        decoration: const BoxDecoration(
+                          shape: BoxShape.circle,
+                          gradient: LinearGradient(
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                            colors: [Color(0x65ffffff), Color(0x22ffffff)],
+                          ),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Color(0x241bc7d2),
+                              blurRadius: 45,
+                              spreadRadius: 8,
+                            ),
+                          ],
+                        ),
+                      ),
+                      Image.asset(
+                        'assets/branding/login_mascot.png',
+                        width: imageSize,
+                        height: imageSize,
+                        fit: BoxFit.contain,
+                        filterQuality: FilterQuality.none,
+                        isAntiAlias: false,
+                      ),
+                    ],
                   ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Color(0x241bc7d2),
-                      blurRadius: 45,
-                      spreadRadius: 8,
-                    ),
-                  ],
                 ),
               ),
-              Image.asset(
-                'assets/branding/login_mascot.png',
-                width: imageSize,
-                height: imageSize,
-                fit: BoxFit.contain,
-                filterQuality: FilterQuality.none,
-                isAntiAlias: false,
+              Positioned(
+                left: greetingLeft,
+                top: compact ? 18 : 42,
+                child: AnimatedSlide(
+                  offset: _greetingVisible ? Offset.zero : const Offset(0, .08),
+                  duration: const Duration(milliseconds: 650),
+                  curve: Curves.easeInOutCubic,
+                  child: AnimatedScale(
+                    scale: _greetingVisible ? 1 : .94,
+                    alignment: Alignment.bottomLeft,
+                    duration: const Duration(milliseconds: 650),
+                    curve: Curves.easeInOutCubic,
+                    child: AnimatedOpacity(
+                      opacity: _greetingVisible ? 1 : 0,
+                      duration: const Duration(milliseconds: 650),
+                      curve: Curves.easeInOutCubic,
+                      child: Stack(
+                        clipBehavior: Clip.none,
+                        children: [
+                          Positioned(
+                            left: 17,
+                            bottom: -7,
+                            child: Transform.rotate(
+                              angle: .785398,
+                              child: Container(
+                                width: 16,
+                                height: 16,
+                                decoration: BoxDecoration(
+                                  color: Colors.white.withValues(alpha: .9),
+                                  border: Border.all(color: Colors.white),
+                                  borderRadius: BorderRadius.circular(3),
+                                ),
+                              ),
+                            ),
+                          ),
+                          AnimatedSize(
+                            duration: const Duration(milliseconds: 320),
+                            curve: Curves.easeOutCubic,
+                            alignment: Alignment.bottomLeft,
+                            child: Container(
+                              constraints:
+                                  BoxConstraints(maxWidth: greetingWidth),
+                              padding: EdgeInsets.symmetric(
+                                horizontal: compact ? 11 : 13,
+                                vertical: compact ? 9 : 11,
+                              ),
+                              decoration: BoxDecoration(
+                                color: Colors.white.withValues(alpha: .9),
+                                borderRadius: BorderRadius.circular(18),
+                                border: Border.all(color: Colors.white),
+                                boxShadow: const [
+                                  BoxShadow(
+                                    color: Color(0x16175f58),
+                                    blurRadius: 22,
+                                    offset: Offset(0, 8),
+                                  ),
+                                ],
+                              ),
+                              child: Text(
+                                _greetingIndex == 0
+                                    ? 'Hello, Seller!'
+                                    : 'Let\'s make today a great sales day.',
+                                style: TextStyle(
+                                  color: _greetingIndex == 0
+                                      ? const Color(0xff123c38)
+                                      : const Color(0xff52756d),
+                                  fontSize: _greetingIndex == 0
+                                      ? (compact ? 14 : 17)
+                                      : (compact ? 10.5 : 12),
+                                  height: 1.35,
+                                  fontWeight: _greetingIndex == 0
+                                      ? FontWeight.w800
+                                      : FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
               ),
             ],
           ),
@@ -378,23 +487,25 @@ class _LoginScreenState extends State<LoginScreen> {
           offset: Offset(0, compact ? -13 : -20),
           child: Column(
             children: [
-              Text(
-                'Hello, seller!',
-                textAlign: TextAlign.center,
-                style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                      color: const Color(0xff123c38),
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: -.8,
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    Icons.auto_awesome_rounded,
+                    color: const Color(0xffffaa00),
+                    size: compact ? 21 : 25,
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    'CHIRPY POS',
+                    style: TextStyle(
+                      color: const Color(0xff146f66),
+                      fontSize: compact ? 23 : 30,
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: 1.4,
                     ),
-              ),
-              const SizedBox(height: 5),
-              const Text(
-                'Let\'s make today a great sales day.',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  color: Color(0xff52756d),
-                  fontWeight: FontWeight.w500,
-                ),
+                  ),
+                ],
               ),
               const SizedBox(height: 12),
               const Wrap(
@@ -466,7 +577,6 @@ class _LoginScreenState extends State<LoginScreen> {
                     mode: DeploymentMode.standalone,
                     icon: LucideIcons.smartphone,
                     title: 'Local',
-                    caption: 'This device',
                   ),
                 ),
                 const SizedBox(width: 10),
@@ -475,7 +585,6 @@ class _LoginScreenState extends State<LoginScreen> {
                     mode: DeploymentMode.hosted,
                     icon: LucideIcons.server,
                     title: 'Server',
-                    caption: 'Shared data',
                   ),
                 ),
               ],
@@ -713,77 +822,79 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xffeafaff),
-      body: DecoratedBox(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [
-              Color(0xffdcf8ff),
-              Color(0xfff4fbef),
-              Color(0xfffff7dc),
-            ],
-            stops: [0, .58, 1],
-          ),
-        ),
-        child: Stack(
-          children: [
-            const Positioned(
-              top: -110,
-              right: -80,
-              child: _GlowOrb(size: 270, color: Color(0x48ffffff)),
-            ),
-            const Positioned(
-              top: 250,
-              left: -90,
-              child: _GlowOrb(size: 210, color: Color(0x30ffd648)),
-            ),
-            const Positioned(
-              bottom: -100,
-              right: -70,
-              child: _GlowOrb(size: 230, color: Color(0x2619c6bd)),
-            ),
-            SafeArea(
-              child: LayoutBuilder(
-                builder: (context, constraints) {
-                  final wide = constraints.maxWidth >= 820;
-                  return SingleChildScrollView(
-                    padding: EdgeInsets.fromLTRB(
-                      wide ? 42 : 18,
-                      wide ? 28 : 14,
-                      wide ? 42 : 18,
-                      26,
-                    ),
-                    child: Center(
-                      child: ConstrainedBox(
-                        constraints: BoxConstraints(maxWidth: wide ? 980 : 470),
-                        child: wide
-                            ? Row(
-                                children: [
-                                  Expanded(
-                                      child: _hero(context, compact: false)),
-                                  const SizedBox(width: 44),
-                                  SizedBox(
-                                    width: 430,
-                                    child: _loginCard(context),
-                                  ),
-                                ],
-                              )
-                            : Column(
-                                children: [
-                                  _hero(context, compact: true),
-                                  _loginCard(context),
-                                ],
-                              ),
-                      ),
-                    ),
-                  );
-                },
+      backgroundColor: const Color(0xfffff7dc),
+      body: Stack(
+        fit: StackFit.expand,
+        children: [
+          const Positioned.fill(
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [
+                    Color(0xffdcf8ff),
+                    Color(0xfff4fbef),
+                    Color(0xfffff7dc),
+                  ],
+                  stops: [0, .58, 1],
+                ),
               ),
             ),
-          ],
-        ),
+          ),
+          const Positioned(
+            top: -110,
+            right: -80,
+            child: _GlowOrb(size: 270, color: Color(0x48ffffff)),
+          ),
+          const Positioned(
+            top: 250,
+            left: -90,
+            child: _GlowOrb(size: 210, color: Color(0x30ffd648)),
+          ),
+          const Positioned(
+            bottom: -100,
+            right: -70,
+            child: _GlowOrb(size: 230, color: Color(0x2619c6bd)),
+          ),
+          SafeArea(
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final wide = constraints.maxWidth >= 820;
+                return SingleChildScrollView(
+                  padding: EdgeInsets.fromLTRB(
+                    wide ? 42 : 18,
+                    wide ? 28 : 14,
+                    wide ? 42 : 18,
+                    26,
+                  ),
+                  child: Center(
+                    child: ConstrainedBox(
+                      constraints: BoxConstraints(maxWidth: wide ? 980 : 470),
+                      child: wide
+                          ? Row(
+                              children: [
+                                Expanded(child: _hero(context, compact: false)),
+                                const SizedBox(width: 44),
+                                SizedBox(
+                                  width: 430,
+                                  child: _loginCard(context),
+                                ),
+                              ],
+                            )
+                          : Column(
+                              children: [
+                                _hero(context, compact: true),
+                                _loginCard(context),
+                              ],
+                            ),
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+        ],
       ),
     );
   }

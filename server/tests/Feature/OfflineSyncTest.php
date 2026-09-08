@@ -276,4 +276,37 @@ class OfflineSyncTest extends TestCase
             ->assertUnprocessable()
             ->assertJsonPath('message', 'Register this device before synchronizing.');
     }
+
+    public function test_product_and_business_data_pulls_are_independent_full_snapshots(): void
+    {
+        $businessId = (string) Str::uuid();
+        $branchId = (string) Str::uuid();
+        $productId = (string) Str::uuid();
+        $old = now()->subYear();
+        DB::table('businesses')->insert(['id' => $businessId, 'name' => 'Test Store', 'currency' => 'PHP', 'created_at' => $old, 'updated_at' => $old]);
+        DB::table('branches')->insert(['id' => $branchId, 'business_id' => $businessId, 'name' => 'Main', 'code' => 'MAIN', 'timezone' => 'Asia/Manila', 'created_at' => $old, 'updated_at' => $old]);
+        DB::table('products')->insert(['id' => $productId, 'business_id' => $businessId, 'name' => 'Legacy Item', 'selling_price' => 20, 'cost_price' => 10, 'unit' => 'piece', 'created_at' => $old, 'updated_at' => $old]);
+        DB::table('product_barcodes')->insert(['id' => (string) Str::uuid(), 'product_id' => $productId, 'code' => 'LEGACY-001', 'type' => 'unknown', 'created_at' => $old, 'updated_at' => $old]);
+        DB::table('inventory_items')->insert(['id' => (string) Str::uuid(), 'branch_id' => $branchId, 'product_id' => $productId, 'quantity' => 9, 'created_at' => $old, 'updated_at' => $old]);
+        DB::table('business_settings')->insert(['id' => (string) Str::uuid(), 'business_id' => $businessId, 'key' => 'store_name', 'value' => 'Legacy Store', 'created_at' => $old, 'updated_at' => $old]);
+        Sanctum::actingAs(User::factory()->create(['business_id' => $businessId, 'branch_id' => $branchId, 'role' => 'admin']));
+
+        $productPayload = $this->getJson('/api/sync/pull?scope=products&limit=100')
+            ->assertOk()
+            ->assertJsonPath('full_snapshot', true)
+            ->assertJsonPath('products.0.id', $productId)
+            ->assertJsonPath('barcodes.0.code', 'LEGACY-001')
+            ->json();
+        $this->assertArrayNotHasKey('inventory', $productPayload);
+        $this->assertArrayNotHasKey('settings', $productPayload);
+
+        $businessPayload = $this->getJson('/api/sync/pull?scope=business_data')
+            ->assertOk()
+            ->assertJsonPath('full_snapshot', true)
+            ->assertJsonPath('inventory.0.product_id', $productId)
+            ->assertJsonPath('settings.0.key', 'store_name')
+            ->json();
+        $this->assertArrayNotHasKey('products', $businessPayload);
+        $this->assertArrayNotHasKey('barcodes', $businessPayload);
+    }
 }

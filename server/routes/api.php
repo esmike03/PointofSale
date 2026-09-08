@@ -1,13 +1,13 @@
 <?php
 
 use App\Http\Controllers\Api\AuthController;
-use App\Http\Controllers\Api\ProductController;
 use App\Http\Controllers\Api\DeviceController;
-use App\Http\Controllers\Api\SyncController;
 use App\Http\Controllers\Api\InventoryController;
-use App\Http\Controllers\Api\SupplierController;
 use App\Http\Controllers\Api\ManagementController;
+use App\Http\Controllers\Api\ProductController;
 use App\Http\Controllers\Api\SalesController;
+use App\Http\Controllers\Api\SupplierController;
+use App\Http\Controllers\Api\SyncController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/health', fn () => ['status' => 'ok', 'service' => 'pos-api']);
@@ -20,6 +20,8 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/auth/logout', [AuthController::class, 'logout']);
     Route::get('/products', [ProductController::class, 'index']);
     Route::post('/products', [ProductController::class, 'store']);
+    Route::delete('/products/reset', [ProductController::class, 'reset'])
+        ->middleware('throttle:3,1');
     Route::post('/products/{productId}/archive', [ProductController::class, 'archive']);
     Route::post('/products/{productId}/restore', [ProductController::class, 'restore']);
     Route::get('/sales/receipt/{receiptNumber}', [SalesController::class, 'showByReceipt']);
